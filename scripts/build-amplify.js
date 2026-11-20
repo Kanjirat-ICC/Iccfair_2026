@@ -13,6 +13,8 @@ fs.mkdirSync(stat, { recursive: true });
 
 const copy = (src, dst) => fs.cpSync(path.join(root, src), dst, { recursive: true });
 ['server.js', 'store.js', 'event.config.json', 'package.json', 'views'].forEach(f => copy(f, path.join(compute, f)));
+/* เซิร์ฟเวอร์ต้องเห็นรายชื่อไฟล์ภาพ (wheel/logo) เพื่อเลือกภาพที่ถูกต้อง */
+copy('public', path.join(compute, 'public'));
 if (fs.existsSync(path.join(root, 'node_modules'))) copy('node_modules', path.join(compute, 'node_modules'));
 else console.warn('⚠️  ไม่พบ node_modules — รัน npm install --omit=dev ก่อน (จำเป็นสำหรับ DynamoDB)');
 if (fs.existsSync(path.join(root, '.env'))) copy('.env', path.join(compute, '.env'));

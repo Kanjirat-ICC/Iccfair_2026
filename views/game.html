@@ -555,18 +555,18 @@ const _layoutCache = {};
 function layoutSegment(arLogo, arProd, hubRi){
     const key = N+'|'+arLogo.toFixed(3)+'|'+arProd.toFixed(3);
     if(_layoutCache[key]) return _layoutCache[key];
-    const t = Math.tan(ARC/2), inner = hubRi + 8, side = 0.9;   /* side: เว้นระยะจากเส้นแบ่งช่อง */
-    const Rmax = R - 10;
+    const t = Math.tan(ARC/2), inner = hubRi + 4, side = 0.98;   /* side: เว้นระยะจากเส้นแบ่งช่อง */
+    const Rmax = R - 6;
     let top = Rmax, logoBox = null;
     if(arLogo){
         const pad = 0;
-        let lo=0, hi=R*0.105;
+        let lo=0, hi=R*0.085;
         for(let i=0;i<28;i++){
             const h=(lo+hi)/2, w=h*arLogo, W=w+2*h*pad, H=h*(1+2*pad);
             const r1=Math.sqrt(Math.max(0,Rmax*Rmax-(W/2)*(W/2))), r0=r1-H;
             if(W/2 <= r0*t*side) { lo=h; logoBox={h, w, r1:r1-h*pad, r0}; } else hi=h;
         }
-        if(logoBox) top = logoBox.r0 - R*0.025;
+        if(logoBox) top = logoBox.r0 - R*0.012;
     }
     let lo=0, hi=top-inner, prod={h:0,w:0,r1:top};
     for(let i=0;i<30;i++){
