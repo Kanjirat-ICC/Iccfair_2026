@@ -81,12 +81,14 @@ function dynamoStore(prizes, table, region) {
       })).catch(e => { if (e.name !== 'ConditionalCheckFailedException') throw e; });
     }
   }
-  const ready = seedMissingStock();
+  /* เตรียมสต็อกเริ่มต้นแบบ lazy: ถ้าเชื่อมฐานข้อมูลไม่ได้ (เช่น ยังไม่ได้ตั้งสิทธิ์) จะไม่ทำให้เซิร์ฟเวอร์ล่ม และจะลองใหม่ครั้งถัดไป */
+  let ready = null;
+  const ensureReady = () => (ready ||= seedMissingStock().catch(e => { ready = null; throw e; }));
 
   const store = {
     kind: 'dynamodb',
     async getStock() {
-      await ready;
+      await ensureReady();
       const out = {};
       prizes.forEach(p => { out[p.name] = 0; });
       (await scanAll('STOCK#')).forEach(i => { out[i.pk.S.slice(6)] = Number(i.qty.N); });
