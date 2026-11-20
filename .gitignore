@@ -1,5 +1,7 @@
 node_modules/
-data/
-*.log
+.amplify-hosting/
+deploy.zip
+lambda.zip
 .env
+*.log
 .DS_Store

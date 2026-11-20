@@ -1,15 +1,20 @@
 version: 1
+# Amplify (WEB_COMPUTE) — build จาก repo นี้
+# ตั้ง Environment variables ที่ branch ใน Amplify console:
+#   LUCKYSPIN_ADMIN_PASSWORD = รหัสหลังบ้าน
+#   TABLE_NAME               = luckyspin-iccfair2026
 frontend:
   phases:
     preBuild:
       commands:
-        - npm install
+        - npm install --omit=dev
     build:
-      commands: []
+      commands:
+        - test -n "$LUCKYSPIN_ADMIN_PASSWORD" || (echo "ต้องตั้ง LUCKYSPIN_ADMIN_PASSWORD" && exit 1)
+        - printf "ADMIN_PASSWORD=%s\nTABLE_NAME=%s\nAWS_REGION=%s\n" "$LUCKYSPIN_ADMIN_PASSWORD" "${TABLE_NAME:-luckyspin-iccfair2026}" "${AWS_REGION:-ap-southeast-2}" > .env
+        - node scripts/build-amplify.js
+        - rm -f .env
   artifacts:
-    baseDirectory: /
+    baseDirectory: .amplify-hosting
     files:
       - '**/*'
-  cache:
-    paths:
-      - node_modules/**/*

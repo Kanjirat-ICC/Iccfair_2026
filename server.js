@@ -1,334 +1,250 @@
-const express = require('express');
-const fs      = require('fs');
-const path    = require('path');
+'use strict';
+/*
+ * His&Her Lucky Spin — เซิร์ฟเวอร์ (Node.js ไม่ต้องติดตั้ง framework เพิ่ม)
+ *
+ *   หน้าเว็บ : /  (กรอกรหัส)   /game.html (วงล้อ)   /admin (หลังบ้าน)
+ *   API     : GET /api/check/:id   GET /api/stock   POST /api/spin {memberId}
+ *   หลังบ้าน : /admin/login  /admin  /admin/export.csv
+ *
+ * ตั้งค่าผ่าน environment หรือไฟล์ .env ข้างไฟล์นี้
+ *   ADMIN_PASSWORD  (จำเป็น)  รหัสผ่านหลังบ้าน
+ *   TABLE_NAME      ชื่อตาราง DynamoDB (ไม่ตั้ง = เก็บในหน่วยความจำ ใช้ทดสอบเท่านั้น)
+ *   AWS_REGION      ค่าเริ่มต้น ap-southeast-2
+ *   PORT            ค่าเริ่มต้น 3000
+ */
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
 
-const app  = express();
-const PORT = process.env.PORT || 3000;
-
-/* ── Data storage ── */
-const DATA_DIR   = path.join(__dirname, 'data');
-const DATA_FILE  = path.join(DATA_DIR, 'members.json');
-const ADMIN_PASS = process.env.ADMIN_PASS || 'sahagroup30';
-
-if (!fs.existsSync(DATA_DIR))  fs.mkdirSync(DATA_DIR, { recursive: true });
-if (!fs.existsSync(DATA_FILE)) fs.writeFileSync(DATA_FILE, '[]', 'utf8');
-
-/* ── Stock management ── */
-const STOCK_FILE   = path.join(DATA_DIR, 'stock.json');
-const PRODUCT_NAMES = [
-    'SHEENE Airy Powder 3.5 กรัม',
-    'SHEENE Airy Powder 6 กรัม',
-    'SHEENE Airy Matte Lip',
-    'SHEENE Airy Lip Tint Gloss',
-    'SHEENE Lip Gloss',
-    'SHEENE Oil Free Cake Powder',
-    'HONEI V BSC Age Defence Sunscreen',
-    'HONEI V BSC HYA Royal Honey Serum',
-    'HONEI V BSC Honey Yuzu Whip Foam',
-    'ENFANT Extra Mild Face & Body Wipes',
-    'GoodAge กู๊ดเอจ Adult Diapers',
-];
-function defaultStock(){ const s={}; PRODUCT_NAMES.forEach(n=>s[n]=50); return s; }
-function readStock(){
-    try { return JSON.parse(fs.readFileSync(STOCK_FILE,'utf8')); }
-    catch { return defaultStock(); }
-}
-function writeStock(obj){ fs.writeFileSync(STOCK_FILE, JSON.stringify(obj,null,2),'utf8'); }
-if(!fs.existsSync(STOCK_FILE)) writeStock(defaultStock());
-
-function readMembers() {
-    try { return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); }
-    catch { return []; }
-}
-function writeMembers(arr) {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(arr, null, 2), 'utf8');
-}
-function thaiTime() {
-    return new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' });
+/* ── โหลด .env (ถ้ามี) ── */
+const envFile = path.join(__dirname, '.env');
+if (fs.existsSync(envFile)) {
+  for (const line of fs.readFileSync(envFile, 'utf8').split(/\r?\n/)) {
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/);
+    if (m) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
+  }
 }
 
-/* ── Middleware ── */
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(express.static(__dirname));
+const { createStore, OutOfStock, AlreadyPlayed } = require('./store');
+const CFG = JSON.parse(fs.readFileSync(path.join(__dirname, 'event.config.json'), 'utf8'));
+const PRIZES = CFG.prizes;
+const PRIZE_NAMES = PRIZES.map(p => p.name);
+const store = createStore(PRIZES);
 
-/* ────────────────────────────────────────────────
-   API: save complete game record
-   Body: { memberId, product }
-   Called from game.html after spin result
-──────────────────────────────────────────────── */
-app.post('/api/save', (req, res) => {
-    const id      = (req.body.memberId || '').trim();
-    const product = (req.body.product  || '-').trim();
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
+if (!ADMIN_PASSWORD) console.warn('⚠️  ยังไม่ได้ตั้ง ADMIN_PASSWORD — หลังบ้านจะเข้าไม่ได้');
+const SECRET = crypto.createHash('sha256').update('luckyspin:' + ADMIN_PASSWORD).digest();
+const MEMBER_RE = CFG.memberIdPattern ? new RegExp(CFG.memberIdPattern) : null;
 
-    if (!id) return res.status(400).json({ error: 'กรุณากรอกรหัสสมาชิก' });
+/* ════════════════ TEMPLATES ════════════════ */
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const badgeInner = (CFG.badgeLines || []).map(esc).join('<br>').replace(/ /g, '&nbsp;');
+function themeFile(suffix) {
+  if (!CFG.theme) return '';
+  const f = path.join(__dirname, 'views', `theme-${CFG.theme.replace(/[^\w-]/g, '')}.${suffix}`);
+  return fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '';
+}
+const vars = {
+  FILTER_CSS: CFG.saturation != null && CFG.saturation !== 1 ? `html { filter: saturate(${Number(CFG.saturation)}); }` : '',
+  PAGE_TITLE: esc(CFG.pageTitle),
+  TITLE_MAIN: esc(CFG.titleMain),
+  TITLE_SUB: esc(CFG.titleSub),
+  BADGE_INDEX: badgeInner ? `<span class="ev-badge">${badgeInner}</span>` : '',
+  BADGE_GAME: badgeInner ? `<span class="badge-30">${badgeInner}</span>` : '',
+  TAGLINE: esc(CFG.tagline || '').replace(/\n/g, '<br>'),
+  DATE_TEXT: esc(CFG.dateText),
+  VENUE_TEXT: esc((CFG.venueLines || []).join(' ')),
+  EVENT_INFO: [CFG.dateText, (CFG.venueLines || []).join(' ')].filter(Boolean).map(esc).join('&ensp;|&ensp;'),
+  DATE_NUM: esc(CFG.dateNum),
+  DATE_MONTH: esc(CFG.dateMonth),
+  VENUE_HTML: (CFG.venueLines || []).map(esc).join('<br>'),
+  PRIZE_COUNT: String(PRIZES.length),
+  PRIZE_GRID: PRIZES.map(p => {
+    const w = fs.existsSync(path.join(__dirname, 'public', 'prizes', 'wheel', p.file)) ? 'prizes/wheel/' + p.file : 'prizes/' + p.file;
+    return `<figure class="reg-prize"><img src="${esc(w)}" alt="${esc(p.name)}" loading="lazy"></figure>`;
+  }).join(''),
+  RESULT_MSG: esc(CFG.resultMessage || 'คุณได้รับสินค้าพิเศษ! 🎁'),
+  THEME_HEAD: themeFile('head.html'),
+  THEME_DECOR: themeFile('decor.html'),
+  THEME_CSS: CFG.theme ? fs.readFileSync(path.join(__dirname, 'views', `theme-${CFG.theme.replace(/[^\w-]/g, '')}.css`), 'utf8') : '',
+  PRODUCTS_JSON: JSON.stringify(PRIZES.map(p => ({ file: 'prizes/' + p.file, wheel: fs.existsSync(path.join(__dirname, 'public', 'prizes', 'wheel', p.file)) ? 'prizes/wheel/' + p.file : 'prizes/' + p.file, logo: fs.existsSync(path.join(__dirname, 'public', 'prizes', 'logo', p.file)) ? 'prizes/logo/' + p.file : '', name: p.name }))).replace(/</g, '\\u003c'),
+};
+function render(file) {
+  return fs.readFileSync(path.join(__dirname, 'views', file), 'utf8')
+    .replace(/\{\{(\w+)\}\}/g, (m, k) => (k in vars ? vars[k] : m));
+}
+const PAGES = { 'index.html': render('index.html'), 'game.html': render('game.html') };
 
-    /* หักสต๊อกสินค้าที่ได้รับ */
-    if (product !== '-') {
-        const stock = readStock();
-        if (typeof stock[product] === 'number')
-            stock[product] = Math.max(0, stock[product] - 1);
-        writeStock(stock);
+/* ════════════════ HELPERS ════════════════ */
+const MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.ico': 'image/x-icon', '.css': 'text/css', '.js': 'text/javascript' };
+function send(res, code, body, type = 'text/html; charset=utf-8', extra = {}) {
+  res.writeHead(code, { 'Content-Type': type, 'Cache-Control': 'no-store', ...extra });
+  res.end(body);
+}
+const json = (res, code, obj) => send(res, code, JSON.stringify(obj), 'application/json; charset=utf-8');
+function readBody(req, limit = 1e5) {
+  return new Promise((ok, bad) => {
+    let b = ''; req.on('data', c => { b += c; if (b.length > limit) { bad(new Error('too_large')); req.destroy(); } });
+    req.on('end', () => ok(b)); req.on('error', bad);
+  });
+}
+const cleanId = s => String(s || '').trim().slice(0, 30);
+function validId(id) { return id && (!MEMBER_RE || MEMBER_RE.test(id)); }
+
+/* ── admin session (cookie ลงลายเซ็น อายุ 12 ชม.) ── */
+function sign(v) { return crypto.createHmac('sha256', SECRET).update(v).digest('base64url'); }
+function makeSession() { const exp = String(Date.now() + 12 * 3600e3); return exp + '.' + sign(exp); }
+function isAdmin(req) {
+  const m = (req.headers.cookie || '').match(/(?:^|;\s*)ls_admin=([^;]+)/);
+  if (!m || !ADMIN_PASSWORD) return false;
+  const [exp, sig] = m[1].split('.');
+  if (!exp || !sig || Number(exp) < Date.now()) return false;
+  const a = Buffer.from(sig), b = Buffer.from(sign(exp));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+function samePassword(p) {
+  const a = crypto.createHash('sha256').update(String(p)).digest();
+  const b = crypto.createHash('sha256').update(ADMIN_PASSWORD).digest();
+  return ADMIN_PASSWORD && crypto.timingSafeEqual(a, b);
+}
+const thaiTime = iso => new Date(iso).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', hour12: false });
+
+/* ════════════════ ADMIN PAGES ════════════════ */
+const ADMIN_CSS = `*{box-sizing:border-box}body{margin:0;background:#f0f6ff;font-family:'Kanit',sans-serif;color:#222}
+.wrap{max-width:1000px;margin:0 auto;padding:24px}h1{color:#C9200A;margin:0 0 4px}h2{margin:28px 0 10px;font-size:1.2em}
+.sub{color:#666;margin-bottom:18px}.cards{display:flex;gap:12px;flex-wrap:wrap}
+.card{background:#fff;border-radius:14px;padding:14px 18px;box-shadow:0 4px 14px rgba(0,0,0,.07);min-width:160px}
+.card b{display:block;font-size:1.8em;color:#C9200A}table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.07)}
+th,td{padding:9px 12px;text-align:left;border-bottom:1px solid #eee;font-size:.95em}th{background:#fff4f1;color:#a81500}
+input[type=number],input[type=text]{width:90px;padding:6px 8px;border:2px solid #ddd;border-radius:8px;font-family:inherit}
+button,.btn{border:0;border-radius:20px;padding:7px 16px;background:linear-gradient(135deg,#ff5030,#C9200A);color:#fff;font-family:inherit;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block}
+.ghost{background:#fff;color:#C9200A;border:2px solid #C9200A}.danger{background:#555}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.zero{color:#bbb}.msg{background:#e8fff0;border:1px solid #9ad7ad;padding:8px 12px;border-radius:10px;margin:10px 0}`;
+const FONT = `<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;700;900&display=swap" rel="stylesheet">`;
+
+function loginPage(err = '') {
+  return `<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin Login - ${esc(CFG.pageTitle)}</title>${FONT}<style>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f0f6ff;font-family:'Kanit',sans-serif;padding:24px}
+.box{width:min(420px,100%);background:#fff;border-radius:16px;padding:28px;box-shadow:0 10px 30px rgba(0,0,0,.12)}
+h1{margin:0 0 18px;color:#C9200A;font-size:1.5em}label{display:block;font-weight:700;margin-bottom:8px;color:#333}
+input{width:100%;padding:12px 14px;border:2px solid #ddd;border-radius:10px;font-family:'Kanit',sans-serif;font-size:1em}input:focus{outline:none;border-color:#C9200A}
+button{width:100%;margin-top:16px;border:0;border-radius:30px;padding:12px 18px;background:linear-gradient(135deg,#ff5030,#C9200A);color:#fff;font-family:'Kanit',sans-serif;font-weight:900;font-size:1em;cursor:pointer}
+.err{min-height:22px;color:#C9200A;font-weight:700;margin-top:10px}</style></head><body>
+<form class="box" method="post" action="/admin/login"><h1>ระบบหลังบ้าน Lucky Spin</h1>
+<label for="password">รหัสผ่าน</label><input id="password" name="password" type="password" autocomplete="current-password" autofocus>
+<div class="err">${esc(err)}</div><button type="submit">เข้าสู่ระบบ</button></form></body></html>`;
+}
+
+async function dashboard(msg = '') {
+  const [stock, plays] = await Promise.all([store.getStock(), store.listPlays()]);
+  const given = {}; plays.forEach(p => { given[p.product] = (given[p.product] || 0) + 1; });
+  const remain = PRIZE_NAMES.reduce((s, n) => s + (stock[n] || 0), 0);
+  const rows = PRIZES.map(p => `<tr class="${(stock[p.name] || 0) > 0 ? '' : 'zero'}"><td>${esc(p.name)}</td><td>${given[p.name] || 0}</td>
+<td><form method="post" action="/admin/stock" class="row"><input type="hidden" name="name" value="${esc(p.name)}">
+<input type="number" name="qty" min="0" value="${stock[p.name] || 0}"><button class="ghost">บันทึก</button></form></td></tr>`).join('');
+  const recent = plays.slice(-50).reverse().map(p => `<tr><td>${thaiTime(p.at)}</td><td>${esc(p.memberId)}</td><td>${esc(p.product)}</td>
+<td><form method="post" action="/admin/delete-play" onsubmit="return confirm('ลบรายการนี้? (สต็อกจะไม่ถูกคืน)')"><input type="hidden" name="memberId" value="${esc(p.memberId)}"><button class="ghost">ลบ</button></form></td></tr>`).join('');
+  return `<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>หลังบ้าน - ${esc(CFG.pageTitle)}</title>${FONT}<style>${ADMIN_CSS}</style></head><body><div class="wrap">
+<div class="row" style="justify-content:space-between"><div><h1>Lucky Spin — หลังบ้าน</h1><div class="sub">${esc(CFG.pageTitle)} · ${esc(CFG.dateText)} · ที่เก็บข้อมูล: ${store.kind}</div></div>
+<div class="row"><a class="btn" href="/admin/export.csv">⬇ Export CSV</a><a class="btn ghost" href="/admin">รีเฟรช</a><a class="btn danger" href="/admin/logout">ออกจากระบบ</a></div></div>
+${msg ? `<div class="msg">${esc(msg)}</div>` : ''}
+<div class="cards"><div class="card">ผู้เล่นทั้งหมด<b>${plays.length}</b></div><div class="card">รางวัลคงเหลือรวม<b>${remain}</b></div>
+<div class="card">รางวัลที่ยังมีของ<b>${PRIZE_NAMES.filter(n => (stock[n] || 0) > 0).length}/${PRIZES.length}</b></div></div>
+<h2>สต็อกรางวัล</h2><table><tr><th>รางวัล</th><th>แจกไปแล้ว</th><th>คงเหลือ (แก้ได้)</th></tr>${rows}</table>
+<h2>ผู้เล่นล่าสุด (50 รายการ)</h2><table><tr><th>เวลา</th><th>รหัสสมาชิก</th><th>รางวัลที่ได้</th><th></th></tr>${recent || '<tr><td colspan="4">ยังไม่มีผู้เล่น</td></tr>'}</table>
+<h2>รีเซ็ตทั้งหมด</h2><form method="post" action="/admin/reset" class="row" onsubmit="return confirm('ลบผู้เล่นทั้งหมดและคืนสต็อกตามไฟล์ตั้งค่า?')">
+<span>พิมพ์คำว่า RESET เพื่อยืนยัน (ลบประวัติผู้เล่นทั้งหมด + ตั้งสต็อกกลับเป็นค่าเริ่มต้น)</span><input type="text" name="confirm" placeholder="RESET"><button class="danger">รีเซ็ต</button></form>
+<p class="sub" style="margin-top:24px">แนะนำ: Export CSV เก็บไว้ก่อนรีเซ็ตทุกครั้ง</p></div></body></html>`;
+}
+
+/* ════════════════ ROUTER ════════════════ */
+async function handle(req, res) {
+  const url = new URL(req.url, 'http://x');
+  const p = decodeURIComponent(url.pathname);
+
+  /* หน้าเว็บผู้เล่น */
+  if (p === '/' || p === '/index.html') return send(res, 200, PAGES['index.html']);
+  if (p === '/game.html') return send(res, 200, PAGES['game.html']);
+
+  /* API */
+  if (p.startsWith('/api/check/') && req.method === 'GET') {
+    const id = cleanId(p.slice('/api/check/'.length));
+    if (!validId(id)) return json(res, 200, { invalid: true, message: CFG.memberIdError });
+    const play = await store.getPlay(id);
+    return json(res, 200, play ? { played: true, product: play.product } : { played: false });
+  }
+  if (p === '/api/stock' && req.method === 'GET') return json(res, 200, await store.getStock());
+  if (p === '/api/spin' && req.method === 'POST') {
+    let body = {}; try { body = JSON.parse(await readBody(req)); } catch { /* ignore */ }
+    const id = cleanId(body.memberId);
+    if (!validId(id)) return json(res, 400, { error: 'invalid_member' });
+    try {
+      const rec = await store.spin(id, PRIZE_NAMES);
+      const stock = await store.getStock();
+      const active = PRIZE_NAMES.filter(n => (stock[n] || 0) > 0 || n === rec.product);
+      return json(res, 200, { product: rec.product, activeProducts: active });
+    } catch (e) {
+      if (e instanceof AlreadyPlayed) return json(res, 409, { played: true, product: e.product });
+      if (e instanceof OutOfStock) return json(res, 409, { error: 'out_of_stock' });
+      throw e;
     }
+  }
 
-    const members = readMembers();
-    members.push({
-        id,
-        product,
-        timestamp: new Date().toISOString(),
-        time_th:   thaiTime(),
-    });
-    writeMembers(members);
-    res.json({ success: true });
-});
+  /* หลังบ้าน */
+  if (p === '/admin/login') {
+    if (req.method === 'POST') {
+      const pw = new URLSearchParams(await readBody(req)).get('password') || '';
+      if (samePassword(pw)) return send(res, 302, '', 'text/plain', { Location: '/admin', 'Set-Cookie': `ls_admin=${makeSession()}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=43200` });
+      return send(res, 401, loginPage('รหัสผ่านไม่ถูกต้อง'));
+    }
+    return send(res, 200, loginPage());
+  }
+  if (p.startsWith('/admin')) {
+    if (!isAdmin(req)) return send(res, 302, '', 'text/plain', { Location: '/admin/login' });
+    if (p === '/admin/logout') return send(res, 302, '', 'text/plain', { Location: '/admin/login', 'Set-Cookie': 'ls_admin=; Path=/; Max-Age=0' });
+    if (p === '/admin/export.csv') {
+      const plays = await store.listPlays();
+      const q = v => `"${String(v).replace(/"/g, '""')}"`;
+      const csv = '﻿' + ['เวลา,รหัสสมาชิก,รางวัล', ...plays.map(r => [thaiTime(r.at), r.memberId, r.product].map(q).join(','))].join('\r\n');
+      const fname = `luckyspin-${new Date().toISOString().slice(0, 10)}.csv`;
+      return send(res, 200, csv, 'text/csv; charset=utf-8', { 'Content-Disposition': `attachment; filename="${fname}"` });
+    }
+    if (req.method === 'POST') {
+      const f = new URLSearchParams(await readBody(req));
+      let msg = '';
+      if (p === '/admin/stock') {
+        const name = f.get('name'), qty = Math.max(0, parseInt(f.get('qty'), 10) || 0);
+        if (PRIZE_NAMES.includes(name)) { await store.setStock(name, qty); msg = `ตั้งสต็อก "${name}" = ${qty}`; }
+      } else if (p === '/admin/delete-play') {
+        await store.deletePlay(cleanId(f.get('memberId'))); msg = 'ลบรายการแล้ว';
+      } else if (p === '/admin/reset') {
+        if (f.get('confirm') === 'RESET') { await store.resetAll(); msg = 'รีเซ็ตเรียบร้อย'; } else msg = 'ไม่ได้รีเซ็ต — ต้องพิมพ์ RESET ให้ถูกต้อง';
+      }
+      return send(res, 200, await dashboard(msg));
+    }
+    if (p === '/admin' || p === '/admin/') return send(res, 200, await dashboard());
+  }
 
-/* ────────────────────────────────────────────────
-   API: stock levels (used by game.html on load)
-──────────────────────────────────────────────── */
-app.get('/api/stock', (req, res) => {
-    res.setHeader('Cache-Control', 'no-store');
-    res.json(readStock());
-});
-
-/* ────────────────────────────────────────────────
-   Admin: update stock
-   POST /admin/stock  Body: { productName: qty, ... }
-──────────────────────────────────────────────── */
-app.post('/admin/stock', (req, res) => {
-    const stock = readStock();
-    Object.entries(req.body).forEach(([name, qty]) => {
-        const n = parseInt(qty);
-        if (!isNaN(n) && n >= 0) stock[name] = n;
-    });
-    writeStock(stock);
-    res.json({ success: true, stock });
-});
-
-/* ────────────────────────────────────────────────
-   API: check if member has already played
-   GET /api/check/:id  →  { played: bool, product? }
-──────────────────────────────────────────────── */
-app.get('/api/check/:id', (req, res) => {
-    const id = (req.params.id || '').trim();
-    if (!id) return res.status(400).json({ error: 'กรุณากรอกรหัสสมาชิก' });
-    const members = readMembers();
-    const found = members.find(m => m.id === id && m.product && m.product !== '-');
-    if (found) return res.json({ played: true, product: found.product });
-    return res.json({ played: false });
-});
-
-/* ── (legacy) register without product ── */
-app.post('/api/register', (req, res) => {
-    const id = (req.body.memberId || '').trim();
-    if (!id) return res.status(400).json({ error: 'กรุณากรอกรหัสสมาชิก' });
-    const members = readMembers();
-    members.push({ id, product: '-', timestamp: new Date().toISOString(), time_th: thaiTime() });
-    writeMembers(members);
-    res.json({ success: true });
-});
-
-/* ────────────────────────────────────────────────
-   Admin: JSON list (no password required)
-──────────────────────────────────────────────── */
-app.get('/admin/members', (req, res) => {
-    const members = readMembers();
-    res.json({ count: members.length, members });
-});
-
-/* ────────────────────────────────────────────────
-   Admin: CSV export (no password required)
-──────────────────────────────────────────────── */
-app.get('/admin/export', (req, res) => {
-    const members = readMembers();
-    const csv = '﻿' +
-        'ลำดับ,รหัสสมาชิก,สินค้าที่ได้รับ,วันที่-เวลา\n' +
-        members.map((m, i) =>
-            `${i + 1},"${m.id}","${m.product || '-'}","${m.time_th}"`
-        ).join('\n');
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition',
-        `attachment; filename="sahagroup30_members_${new Date().toISOString().slice(0,10)}.csv"`);
-    res.send(csv);
-});
-
-/* ────────────────────────────────────────────────
-   Admin: HTML dashboard (no password required)
-──────────────────────────────────────────────── */
-app.get('/admin', (req, res) => {
-    const pass = '';
-    const members = readMembers();
-    const stock   = readStock();
-
-    /* stats */
-    const total      = members.length;
-    const played     = members.filter(m => m.product && m.product !== '-').length;
-    const pending    = total - played;
-    const totalStock = Object.values(stock).reduce((a,b)=>a+b, 0);
-
-    /* stock cards */
-    const stockCards = Object.entries(stock).map(([name, qty]) => {
-        const border = qty === 0 ? '#dc3545' : qty <= 10 ? '#e67e22' : '#28a745';
-        const label  = qty === 0 ? '⛔ หมด' : qty <= 10 ? '⚠️ น้อย' : '✅ พร้อม';
-        return `<div style="background:#fff;border-radius:12px;padding:12px 14px;box-shadow:0 2px 8px rgba(0,0,0,.08);border-left:4px solid ${border}">
-            <div style="font-size:.8em;color:#555;margin-bottom:8px;font-weight:700;line-height:1.3">${name}</div>
-            <div style="display:flex;align-items:center;gap:8px">
-                <input type="number" class="stock-input" data-name="${name.replace(/"/g,'&quot;')}" value="${qty}" min="0"
-                       style="width:72px;padding:6px 4px;border:2px solid #ddd;border-radius:8px;font-family:'Kanit',sans-serif;font-weight:700;font-size:1.05em;text-align:center">
-                <span style="font-size:.82em;font-weight:700;color:${border}">${label}</span>
-            </div>
-        </div>`;
-    }).join('');
-
-    /* product frequency */
-    const freq = {};
-    members.forEach(m => {
-        if (m.product && m.product !== '-')
-            freq[m.product] = (freq[m.product] || 0) + 1;
-    });
-    const topProduct = Object.entries(freq).sort((a,b)=>b[1]-a[1])[0];
-
-    const rows = [...members].reverse().map((m, i) => {
-        const idx  = total - i;
-        const hasProd = m.product && m.product !== '-';
-        return `<tr>
-            <td style="text-align:center">${idx}</td>
-            <td><strong>${m.id}</strong></td>
-            <td style="color:${hasProd?'#155d2f':'#aaa'}">
-                ${hasProd ? '✅ ' + m.product : '⏳ ยังไม่เล่น'}
-            </td>
-            <td style="color:#888;font-size:.88em">${m.time_th}</td>
-        </tr>`;
-    }).join('');
-
-    res.send(`<!DOCTYPE html><html lang="th">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Admin – สหกรุ๊ปแฟร์ 30</title>
-<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;700;900&display=swap" rel="stylesheet">
-<style>
-  html{filter:saturate(0.7)}/* ช่วงไว้อาลัย */
-  *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:'Kanit',sans-serif;background:#f0f6ff;padding:24px}
-  header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px}
-  h1{color:#C9200A;font-size:1.7em}
-  .stat-row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:20px}
-  .stat{background:#fff;border-radius:16px;padding:16px 24px;text-align:center;
-        box-shadow:0 4px 12px rgba(0,0,0,.08);min-width:120px;flex:1}
-  .stat .num{font-size:2em;font-weight:900;line-height:1}
-  .stat .lbl{font-size:.78em;color:#666;margin-top:4px}
-  .stat.red  .num{color:#C9200A}
-  .stat.blue .num{color:#00349E}
-  .stat.pink .num{color:#EC008C}
-  .stat.green .num{color:#155d2f}
-  .btn{display:inline-flex;align-items:center;gap:6px;padding:10px 22px;border-radius:30px;
-       text-decoration:none;font-weight:700;font-size:.9em;cursor:pointer;border:none}
-  .btn-green{background:linear-gradient(135deg,#28a745,#1e7e34);color:#fff}
-  .btn-red  {background:linear-gradient(135deg,#ff5030,#C9200A);color:#fff}
-  .btn-gray {background:#eee;color:#333}
-  .search{padding:10px 18px;font-family:'Kanit',sans-serif;font-size:.95em;
-          border:2px solid #ddd;border-radius:30px;width:260px;outline:none}
-  .search:focus{border-color:#C9200A}
-  table{width:100%;border-collapse:collapse;background:#fff;border-radius:16px;
-        overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.09)}
-  th{background:#C9200A;color:#fff;padding:13px 16px;text-align:left;font-size:.92em}
-  td{padding:11px 16px;border-bottom:1px solid #f0f0f0;font-size:.92em}
-  tr:last-child td{border-bottom:none}
-  tr:hover td{background:#fff8f8}
-  .empty{text-align:center;color:#aaa;padding:32px}
-  @media(max-width:600px){td:nth-child(4){display:none}th:nth-child(4){display:none}}
-</style>
-</head>
-<body>
-
-<header>
-  <h1>📋 ระบบหลังบ้าน – Lucky Spin</h1>
-  <div style="display:flex;gap:10px;flex-wrap:wrap">
-    <a class="btn btn-green" href="/admin/export?pass=${pass}">⬇ Export CSV</a>
-    <a class="btn btn-red"   href="/admin?pass=${pass}">🔄 Refresh</a>
-    <a class="btn btn-gray"  href="/">🏠 หน้าแรก</a>
-  </div>
-</header>
-
-<!-- Stats -->
-<div class="stat-row">
-  <div class="stat red">  <div class="num">${total}</div>     <div class="lbl">สมาชิกทั้งหมด</div></div>
-  <div class="stat green"><div class="num">${played}</div>    <div class="lbl">เล่นแล้ว</div></div>
-  <div class="stat blue"> <div class="num">${pending}</div>   <div class="lbl">ยังไม่เล่น</div></div>
-  <div class="stat pink"> <div class="num">${totalStock}</div><div class="lbl">สต๊อกรวม</div></div>
-</div>
-
-<!-- Stock Management -->
-<div style="margin-bottom:20px">
-  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
-    <h2 style="color:#C9200A;font-size:1.1em;font-weight:900">📦 จัดการสต๊อกสินค้า</h2>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-gray" onclick="resetStock()">↺ รีเซ็ต 50 ทุกรายการ</button>
-      <button class="btn btn-green" onclick="saveStock()">💾 บันทึกสต๊อก</button>
-    </div>
-  </div>
-  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">
-    ${stockCards}
-  </div>
-</div>
-
-<!-- Search -->
-<div style="margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-  <input class="search" id="searchInput" type="text"
-         placeholder="🔍 ค้นหารหัสสมาชิก หรือชื่อสินค้า..."
-         oninput="filterTable()">
-  <span id="countLabel" style="color:#666;font-size:.88em"></span>
-</div>
-
-<!-- Table -->
-<table id="dataTable">
-  <thead>
-    <tr>
-      <th style="width:50px">#</th>
-      <th>รหัสสมาชิก</th>
-      <th>สินค้าที่ได้รับ</th>
-      <th>วันที่-เวลา</th>
-    </tr>
-  </thead>
-  <tbody id="tbody">
-    ${rows || '<tr><td colspan="4" class="empty">ยังไม่มีข้อมูล</td></tr>'}
-  </tbody>
-</table>
-
-<p style="margin-top:14px;color:#aaa;font-size:.8em">
-  แสดงรายการล่าสุดก่อน &nbsp;|&nbsp; Admin pass ตั้งค่าได้ผ่าน Railway env: <code>ADMIN_PASS</code>
-</p>
-
-<script>
-async function saveStock(){
-    const inputs = document.querySelectorAll('.stock-input');
-    const body = {};
-    inputs.forEach(inp => body[inp.dataset.name] = parseInt(inp.value)||0);
-    const r = await fetch('/admin/stock',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    if((await r.json()).success){ location.reload(); }
+  /* ไฟล์ภาพ */
+  const safe = path.normalize(p).replace(/^(\.\.[/\\])+/, '');
+  const file = path.join(__dirname, 'public', safe);
+  if (file.startsWith(path.join(__dirname, 'public')) && fs.existsSync(file) && fs.statSync(file).isFile()) {
+    res.writeHead(200, { 'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'public, max-age=86400' });
+    return fs.createReadStream(file).pipe(res);
+  }
+  return send(res, 404, 'Not found', 'text/plain');
 }
-function resetStock(){
-    if(!confirm('รีเซ็ตสต๊อกทุกรายการเป็น 50?')) return;
-    document.querySelectorAll('.stock-input').forEach(inp=>inp.value=50);
-    saveStock();
-}
-function filterTable(){
-    const q   = document.getElementById('searchInput').value.toLowerCase();
-    const rows = document.querySelectorAll('#tbody tr');
-    let shown = 0;
-    rows.forEach(r => {
-        const txt = r.textContent.toLowerCase();
-        const ok  = !q || txt.includes(q);
-        r.style.display = ok ? '' : 'none';
-        if (ok) shown++;
-    });
-    document.getElementById('countLabel').textContent =
-        q ? \`พบ \${shown} รายการ\` : '';
-}
-// update count on load
-document.getElementById('countLabel').textContent = '';
-</script>
-</body></html>`);
-});
 
-app.listen(PORT, () => console.log(`✅  Server running on port ${PORT}`));
+function safeHandle(req, res) {
+  return handle(req, res).catch(err => { console.error(err); if (!res.headersSent) json(res, 500, { error: 'server_error' }); });
+}
+module.exports = { safeHandle };
+
+if (require.main === module) {
+  const PORT = Number(process.env.PORT) || 3000;
+  http.createServer(safeHandle)
+    .listen(PORT, () => console.log(`Lucky Spin พร้อมที่ http://localhost:${PORT}  (store: ${store.kind})`));
+}

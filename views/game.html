@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{PAGE_TITLE}} – Lucky Spin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:ital,wght@0,700;0,900;1,700;1,900&family=Sriracha&display=swap" rel="stylesheet">
+
+    <style>
+        {{FILTER_CSS}}
+        * { margin:0; padding:0; box-sizing:border-box; }
+
+        body {
+            background: linear-gradient(180deg,
+                #e8f7ff 0%,#b8e8ff 15%,#5ec4f5 40%,#7fd4f8 70%,#c8eeff 100%);
+            min-height:100vh;
+            display:flex; flex-direction:column; align-items:center;
+            font-family:'Kanit',sans-serif;
+            overflow-x:hidden;
+            position:relative;
+        }
+
+        /* ── Sun ── */
+        .sun {
+            position:fixed; top:-80px; right:-80px;
+            width:260px; height:260px;
+            background:radial-gradient(circle,#fffcb0 0%,#ffe040 35%,rgba(255,220,0,0) 68%);
+            border-radius:50%; animation:sun-pulse 4s ease-in-out infinite;
+            pointer-events:none; z-index:0;
+        }
+        @keyframes sun-pulse{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.1);opacity:1}}
+
+        /* ── Clouds ── */
+        .cloud{position:fixed;background:#fff;border-radius:60px;pointer-events:none;z-index:0;}
+        .cloud::before,.cloud::after{content:'';position:absolute;background:#fff;border-radius:50%;}
+        .c1{width:180px;height:55px;top:50px;left:-40px;opacity:.9;animation:drift 20s linear infinite;}
+        .c1::before{width:90px;height:90px;top:-46px;left:22px;}.c1::after{width:65px;height:65px;top:-32px;left:78px;}
+        .c2{width:140px;height:46px;top:110px;right:-60px;opacity:.75;animation:drift 28s linear infinite reverse;}
+        .c2::before{width:70px;height:70px;top:-36px;left:18px;}.c2::after{width:52px;height:52px;top:-26px;left:60px;}
+        .c3{width:220px;height:68px;top:14px;left:42%;opacity:.6;animation:drift 34s linear infinite;}
+        .c3::before{width:100px;height:100px;top:-54px;left:28px;}.c3::after{width:76px;height:76px;top:-42px;left:100px;}
+        .c4{width:110px;height:36px;top:80px;left:60%;opacity:.55;animation:drift 22s linear infinite reverse;}
+        .c4::before{width:55px;height:55px;top:-28px;left:14px;}.c4::after{width:40px;height:40px;top:-20px;left:48px;}
+        @keyframes drift{from{transform:translateX(-130%)}to{transform:translateX(120vw)}}
+
+        /* ══════════════════════════════════════════════
+           2-COLUMN LAYOUT
+        ══════════════════════════════════════════════ */
+        .main-layout {
+            display:flex; flex-direction:row; align-items:center;
+            width:100%; min-height:100vh;
+            padding:10px 18px; gap:0;
+            position:relative; z-index:2;
+        }
+        .col-left {
+            flex:0 0 30%;
+            display:flex; flex-direction:column; align-items:center; justify-content:center;
+            padding:10px 8px;
+        }
+        .col-right {
+            flex:0 0 70%;
+            display:flex; flex-direction:column; align-items:center; justify-content:center;
+            padding:4px 6px;
+        }
+
+        /* ══════════════════════════════════════════════
+           LEFT COLUMN CONTENT
+        ══════════════════════════════════════════════ */
+
+        /* PRIMARY: Lucky Spin game title */
+        .game-title-bar {
+            display:inline-flex; align-items:center; justify-content:center;
+            gap:clamp(8px,1.4vw,16px);
+            background:linear-gradient(135deg,#ff5030,#C9200A);
+            padding:clamp(9px,1.6vw,16px) clamp(22px,4vw,52px);
+            border-radius:50px;
+            box-shadow:0 5px 0 rgba(120,14,0,.55),0 8px 22px rgba(220,30,0,.4);
+            border:clamp(2px,.5vw,3px) solid rgba(255,255,255,.38);
+            margin-bottom:clamp(8px,1.4vw,16px);
+        }
+        .hw-wrap {
+            background:rgba(255,255,255,.95);
+            border-radius:8px; padding:4px 10px;
+            display:inline-flex; align-items:center; line-height:0;
+        }
+        .hw-wrap img {
+            height:clamp(24px,3.4vw,44px); width:auto; display:block;
+        }
+        .lucky-spin-text {
+            font-family:'Kanit',sans-serif; font-weight:900; font-style:italic;
+            font-size:clamp(1.4em,3.2vw,2.6em);
+            color:#fff; letter-spacing:3px;
+            text-shadow:0 2px 6px rgba(0,0,0,.28);
+        }
+
+        /* SECONDARY: Event name */
+        .ev-header { width:100%; text-align:center; }
+        .title-main {
+            display:block;
+            font-family:'Kanit',sans-serif; font-weight:900; font-style:italic;
+            font-size:clamp(3em,9vw,5.8em); line-height:.9;
+            color:#E31D0C;
+            -webkit-text-stroke:clamp(2px,.7vw,5px) #fff;
+            paint-order:stroke fill;
+            filter:drop-shadow(0 5px 10px rgba(200,20,0,.26));
+            letter-spacing:-1px;
+        }
+        .sub-row {
+            display:flex; align-items:center; justify-content:center;
+            gap:clamp(5px,1.5vw,12px);
+            margin-top:clamp(-8px,-1.5vw,-4px);
+        }
+        .title-sub {
+            font-family:'Kanit',sans-serif; font-weight:900; font-style:italic;
+            font-size:clamp(1.9em,6vw,3.8em); line-height:1;
+            color:#E31D0C;
+            -webkit-text-stroke:clamp(1.5px,.5vw,3.5px) #fff;
+            paint-order:stroke fill;
+        }
+        .badge-30 {
+            flex-shrink:0; display:inline-flex; flex-direction:column;
+            align-items:center; justify-content:center;
+            width:clamp(52px,9vw,76px); height:clamp(52px,9vw,76px);
+            border-radius:50%;
+            background:radial-gradient(circle at 38% 32%,#ff4c2a,#C9200A 65%);
+            border:clamp(2px,.45vw,3.5px) solid #fff;
+            box-shadow:0 3px 0 rgba(130,15,0,.55),0 5px 14px rgba(220,30,0,.4);
+            font-family:'Kanit',sans-serif; font-weight:900; color:#fff;
+            font-size:clamp(.52em,1.3vw,.78em); line-height:1.25;
+        }
+        .middle-row {
+            display:flex; align-items:center; justify-content:center;
+            gap:clamp(8px,2.5vw,22px);
+            margin-top:clamp(4px,1vw,9px); flex-wrap:wrap;
+        }
+        .tagline {
+            font-family:'Sriracha',cursive; font-style:italic;
+            font-size:clamp(1.4em,4.2vw,2.9em); font-weight:400;
+            color:#1a1a1a; position:relative; line-height:1;
+            text-shadow:1px 1px 0 rgba(255,255,255,.7);
+        }
+        .tagline::before {
+            content:''; position:absolute;
+            bottom:-5px; left:-2%; width:104%; height:clamp(3px,.8vw,6px);
+            background:#E86020; border-radius:4px; transform:rotate(-1.5deg);
+        }
+        .tagline::after {
+            content:''; position:absolute;
+            bottom:-11px; left:3%; width:96%; height:clamp(2.5px,.6vw,4.5px);
+            background:#E86020; border-radius:3px; transform:rotate(-1deg); opacity:.7;
+        }
+        .date-circle {
+            flex-shrink:0; display:flex; flex-direction:column;
+            align-items:center; justify-content:center;
+            width:clamp(82px,14vw,124px); height:clamp(82px,14vw,124px);
+            border-radius:50%;
+            background:radial-gradient(circle at 38% 30%,#ff5030,#C9200A 70%);
+            border:clamp(2px,.4vw,3.5px) solid rgba(255,255,255,.5);
+            box-shadow:0 4px 0 rgba(130,15,0,.5),0 6px 18px rgba(220,30,0,.4);
+            color:#fff; font-family:'Kanit',sans-serif; line-height:1.18;
+            padding:5px; text-align:center;
+        }
+        .date-num   {font-size:clamp(1.2em,3.2vw,2em);   font-weight:900; line-height:1;}
+        .date-month {font-size:clamp(.64em,1.5vw,.94em);  font-weight:700;}
+        .date-venue {font-size:clamp(.5em, 1.2vw,.76em);  font-weight:700; opacity:.92; line-height:1.15;}
+
+        /* ── Wheel scene: mascots + wheel + stand ── */
+        .wheel-scene {
+            display:flex; align-items:flex-end; justify-content:center;
+            width:100%; overflow:visible; position:relative;
+        }
+        .wheel-center {
+            display:flex; flex-direction:column; align-items:center;
+            flex-shrink:0; position:relative; z-index:2;
+        }
+        /* red stand below wheel */
+        .wheel-stand {
+            width:62%; height:clamp(14px,2.4vw,32px);
+            background:radial-gradient(ellipse at 50% 0%,#ff5030,#C9200A 80%);
+            border-radius:50%/100%;
+            box-shadow:0 5px 0 rgba(120,14,0,.55),0 7px 16px rgba(220,30,0,.4);
+            margin-top:-3px; position:relative; z-index:1;
+        }
+        .wheel-stand::after{
+            content:''; position:absolute;
+            bottom:-10px; left:12%; width:76%; height:clamp(8px,1.4vw,18px);
+            background:linear-gradient(180deg,#C9200A,#a01000);
+            border-radius:50%; box-shadow:0 4px 0 rgba(100,8,0,.5);
+        }
+        /* left mascot */
+        .mascot-l {
+            height:clamp(100px,19vw,260px); width:auto;
+            align-self:flex-end; flex-shrink:0;
+            margin-right:clamp(-30px,-3vw,-10px);
+            z-index:3; pointer-events:none;
+            filter:drop-shadow(3px 4px 8px rgba(0,0,0,.22));
+            animation:mascotBob 2.4s ease-in-out infinite;
+            transform-origin:bottom center;
+        }
+        /* right mascots stack */
+        .mascots-r {
+            display:flex; flex-direction:column; align-items:flex-start;
+            align-self:flex-end; flex-shrink:0;
+            margin-left:clamp(-30px,-3vw,-10px);
+            gap:0; z-index:3; pointer-events:none;
+        }
+        .mascots-r img {
+            width:auto; pointer-events:none;
+            filter:drop-shadow(3px 4px 8px rgba(0,0,0,.22));
+            transform-origin:bottom center;
+        }
+        .mascots-r img:nth-child(1){
+            height:clamp(80px,14vw,190px);
+            animation:mascotBob 2.1s ease-in-out infinite;
+            animation-delay:.5s;
+        }
+        .mascots-r img:nth-child(2){
+            height:clamp(60px,10vw,140px);
+            animation:mascotBob 2.6s ease-in-out infinite;
+            animation-delay:1.1s;
+        }
+        @keyframes mascotBob{
+            0%,100%{transform:translateY(0);}
+            50%    {transform:translateY(clamp(-6px,-1vw,-4px));}
+        }
+        /* ── ตอนหมุน: กระโดดกระตือรือร้น ── */
+        .wheel-scene.spinning .mascot-l,
+        .wheel-scene.spinning .mascots-r img {
+            animation:mascotExcite .32s ease-in-out infinite !important;
+        }
+        @keyframes mascotExcite{
+            0%  {transform:translateY(0)    rotate(-6deg) scale(1);}
+            25% {transform:translateY(-14px) rotate(4deg) scale(1.06);}
+            50% {transform:translateY(0)    rotate(6deg) scale(1);}
+            75% {transform:translateY(-10px) rotate(-4deg) scale(1.04);}
+            100%{transform:translateY(0)    rotate(-6deg) scale(1);}
+        }
+        /* ── ตอนได้รางวัล: กระโดดสูง + หมุนเล็กน้อย ── */
+        .wheel-scene.celebrating .mascot-l,
+        .wheel-scene.celebrating .mascots-r img {
+            animation:mascotCheer .55s cubic-bezier(.34,1.56,.64,1) 3 !important;
+        }
+        @keyframes mascotCheer{
+            0%  {transform:translateY(0)    scale(1)    rotate(0);}
+            40% {transform:translateY(-28px) scale(1.15) rotate(-8deg);}
+            70% {transform:translateY(-16px) scale(1.1)  rotate(7deg);}
+            100%{transform:translateY(0)    scale(1)    rotate(0);}
+        }
+
+        /* ══════════════════════════════════════════════
+           RIGHT COLUMN – WHEEL
+        ══════════════════════════════════════════════ */
+        .wheel-wrap {
+            position:relative; z-index:2;
+            margin:0 auto;
+            display:flex; align-items:center; justify-content:center;
+        }
+        .outer-ring {
+            position:absolute; border-radius:50%; background:transparent;
+            box-shadow:
+                0 0 0 8px #fff,
+                0 0 0 14px #FF6348,
+                0 0 0 20px #FFD700,
+                0 0 30px rgba(255,99,72,.4),
+                0 0 60px rgba(255,99,72,.2);
+        }
+        .lights-ring{position:absolute;border-radius:50%;pointer-events:none;}
+        .light-dot{position:absolute;border-radius:50%;animation:blink-light 1s ease-in-out infinite alternate;}
+        @keyframes blink-light{from{opacity:.45;box-shadow:none}to{opacity:1;box-shadow:0 0 9px currentColor}}
+        .pointer-wrap{
+            position:absolute;top:-40px;left:50%;
+            transform:translateX(-50%);z-index:10;
+            display:flex;flex-direction:column;align-items:center;
+        }
+        .pointer-head{
+            width:0;height:0;
+            border-left:24px solid transparent;
+            border-right:24px solid transparent;
+            border-top:52px solid #E31D0C;
+            filter:drop-shadow(0 4px 7px rgba(220,20,0,.7));
+        }
+        .pointer-base{
+            width:16px;height:16px;
+            background:#E31D0C;border-radius:50%;
+            margin-top:-5px;box-shadow:0 0 10px rgba(220,20,0,.8);
+        }
+        #wheelCanvas{display:block;border-radius:50%;}
+
+        /* ── Spin button ── */
+        .btn-area{
+            position:relative;z-index:2;
+            margin-top:14px;
+            display:flex;flex-direction:column;align-items:center;gap:10px;
+        }
+        #spinBtn{
+            padding:clamp(12px,2.2vw,17px) clamp(48px,9vw,76px);
+            font-family:'Kanit',sans-serif;
+            font-size:clamp(1.15em,2.8vw,1.55em); font-weight:900;
+            background:linear-gradient(135deg,#ff5030,#C9200A,#a81500);
+            color:#fff;border:none;border-radius:50px;cursor:pointer;
+            box-shadow:0 6px 0 rgba(110,10,0,.6),0 8px 22px rgba(220,30,0,.45);
+            transition:transform .15s,box-shadow .15s;
+            letter-spacing:2px;
+            text-shadow:0 2px 5px rgba(0,0,0,.3);
+            border:3px solid rgba(255,255,255,.28);
+        }
+        #spinBtn:hover:not(:disabled){transform:translateY(-3px);box-shadow:0 9px 0 rgba(110,10,0,.6),0 12px 30px rgba(220,30,0,.55);}
+        #spinBtn:active:not(:disabled){transform:translateY(3px);box-shadow:0 3px 0 rgba(110,10,0,.6);}
+        #spinBtn:disabled{opacity:.45;cursor:not-allowed;transform:none;}
+        #spinCount{color:#444;font-size:.88em;font-weight:700;background:rgba(255,255,255,.72);padding:4px 18px;border-radius:20px;}
+
+        /* ── Result modal ── */
+        #resultOverlay{
+            display:none;position:fixed;inset:0;
+            background:rgba(80,160,220,.38);
+            backdrop-filter:blur(7px);z-index:200;
+            justify-content:center;align-items:center;
+        }
+        #resultOverlay.show{display:flex;}
+        .result-card{
+            background:linear-gradient(160deg,#fff 0%,#fff6ee 100%);
+            border-radius:28px;padding:32px 38px 28px;
+            text-align:center;max-width:420px;width:92%;
+            box-shadow:0 0 0 5px #FF6348,0 0 0 9px #FFD700,0 28px 55px rgba(0,0,0,.28);
+            animation:popIn .45s cubic-bezier(.34,1.56,.64,1) forwards;
+        }
+        @keyframes popIn{from{transform:scale(.3) rotate(-8deg);opacity:0}to{transform:scale(1) rotate(0deg);opacity:1}}
+        .result-congrats{font-size:1.85em;font-weight:900;color:#E31D0C;margin-bottom:12px;}
+        .result-img-wrap{
+            width:210px;height:210px;
+            display:flex;align-items:center;justify-content:center;
+            margin:0 auto 14px;
+            background:#f7f7f7;border-radius:16px;
+            border:3px solid #FFD700;overflow:hidden;
+        }
+        .result-img-wrap img{max-width:100%;max-height:100%;object-fit:contain;}
+        .result-name{font-size:1.3em;font-weight:900;color:#E31D0C;margin-bottom:6px;}
+        .result-msg{font-size:.92em;color:#555;margin-bottom:20px;font-weight:700;}
+        .result-close{
+            padding:12px 42px;
+            font-family:'Kanit',sans-serif;font-size:1.05em;font-weight:900;
+            background:linear-gradient(135deg,#ff5030,#C9200A);
+            color:#fff;border:none;border-radius:30px;cursor:pointer;
+            box-shadow:0 4px 0 rgba(110,10,0,.55),0 6px 16px rgba(220,30,0,.4);
+            transition:transform .15s;letter-spacing:1px;
+        }
+        .result-close:hover{transform:translateY(-2px);}
+
+        /* ── Confetti ── */
+        .confetti-piece{position:fixed;top:-14px;pointer-events:none;animation:confettiFall linear forwards;}
+        @keyframes confettiFall{to{transform:translateY(110vh) rotate(720deg);opacity:0}}
+
+        /* ── จอแนวตั้ง (แท็บเล็ต/จอบูธแนวตั้ง): เรียงหัวข้อไว้บน วงล้อไว้ล่าง ── */
+        @media (orientation: portrait) {
+            .main-layout { flex-direction:column; justify-content:center; gap:clamp(30px,5vh,70px); padding:4vh 4vw; }
+            .col-left, .col-right { flex:0 0 auto; width:100%; }
+            .col-left { font-size:clamp(14px,2.2vw,26px); }
+            .middle-row { flex-direction:row !important; }
+        }
+        /* ── THEME (views/theme-*.css) ── */
+        {{THEME_CSS}}
+    </style>
+{{THEME_HEAD}}
+</head>
+<body>
+{{THEME_DECOR}}
+
+<div class="sun"></div>
+<div class="cloud c1"></div><div class="cloud c2"></div>
+<div class="cloud c3"></div><div class="cloud c4"></div>
+
+<div class="main-layout">
+
+    <!-- ════════════ LEFT: ข้อความ + Mascots ════════════ -->
+    <div class="col-left">
+
+        <!-- PRIMARY header: Lucky Spin -->
+        <div class="game-title-bar">
+            <span class="hw-wrap">
+                <img src="assets/hisher.svg" alt="His&Her Plus Point">
+            </span>
+            <span class="lucky-spin-text">Lucky Spin</span>
+        </div>
+
+        <!-- SECONDARY: event name -->
+        <div class="ev-header">
+            <span class="title-main">{{TITLE_MAIN}}</span>
+            <div class="sub-row">
+                <span class="title-sub">{{TITLE_SUB}}</span>
+                {{BADGE_GAME}}
+            </div>
+            <div class="middle-row">
+                <span class="tagline">{{TAGLINE}}</span>
+                <div class="date-circle">
+                    <div class="date-num">{{DATE_NUM}}</div>
+                    <div class="date-month">{{DATE_MONTH}}</div>
+                    <div class="date-venue">{{VENUE_HTML}}</div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ════════════ RIGHT: วงล้อ ════════════ -->
+    <div class="col-right">
+        <div class="wheel-scene">
+            <!-- mascot ซ้าย -->
+            <img class="mascot-l" src="assets/Mascot_02.png" alt="">
+
+            <!-- วงล้อ + ฐาน -->
+            <div class="wheel-center">
+                <div class="wheel-wrap" id="wheelWrap">
+                    <div class="outer-ring"  id="outerRing"></div>
+                    <div class="lights-ring" id="lightsRing"></div>
+                    <div class="pointer-wrap">
+                        <div class="pointer-head"></div>
+                        <div class="pointer-base"></div>
+                    </div>
+                    <canvas id="wheelCanvas"></canvas>
+                </div>
+                <div class="wheel-stand"></div>
+            </div>
+
+            <!-- mascots ขวา -->
+            <div class="mascots-r">
+                <img src="assets/Mascot_03.png" alt="">
+                <img src="assets/Mascot_04.png" alt="">
+            </div>
+        </div>
+        <div class="btn-area">
+            <button id="spinBtn" onclick="spin()" disabled>หมุนเลย!&ensp;🎯</button>
+            <div id="spinCount">หมุนไปแล้ว: <span id="countNum">0</span> ครั้ง</div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Result modal -->
+<div id="resultOverlay" onclick="closeResult()" style="cursor:pointer">
+    <div class="result-card">
+        <div class="result-congrats">🎉 ยินดีด้วย! 🎉</div>
+        <div class="result-img-wrap"><img id="resultImg" src="" alt=""></div>
+        <div class="result-name"  id="resultName"></div>
+        <div class="result-msg">{{RESULT_MSG}}</div>
+    </div>
+</div>
+
+<script>
+/* ── Member ID guard: ถ้าไม่มี ID → กลับหน้ากรอก ── */
+const MEMBER_ID = sessionStorage.getItem('memberId');
+if (!MEMBER_ID) { window.location.replace('index.html'); }
+
+/* ════════════════════════════════════════════════════════════
+   PRODUCT DATA  (10 segments, alternating M100 / C100M67K38)
+════════════════════════════════════════════════════════════ */
+const PRODUCTS = {{PRODUCTS_JSON}};
+const SEG_COLORS = ['#EC008C', '#00349E'];   // M100 | C100M67K38
+const PRODUCT_BY_NAME = PRODUCTS.reduce((map, product) => {
+    map[product.name] = product;
+    return map;
+}, {});
+
+/* segments / N / ARC set dynamically after stock fetch */
+let segments = [], N = 0, ARC = 0;
+
+/* ════════════════════════════════════════════════════════════
+   CANVAS SETUP
+════════════════════════════════════════════════════════════ */
+const DPR  = Math.min(window.devicePixelRatio || 1, 3);
+const PORTRAIT = window.innerHeight > window.innerWidth;
+const SIZE = PORTRAIT
+    ? Math.min(Math.floor(window.innerWidth * 0.66), Math.floor(window.innerHeight * 0.52), 900)
+    : Math.min(Math.floor(window.innerWidth * 0.55) - 24, Math.floor(window.innerHeight * 0.72), 900);
+const canvas = document.getElementById('wheelCanvas');
+canvas.width  = SIZE * DPR;
+canvas.height = SIZE * DPR;
+canvas.style.width  = SIZE + 'px';
+canvas.style.height = SIZE + 'px';
+const ctx = canvas.getContext('2d');
+ctx.scale(DPR, DPR);
+ctx.imageSmoothingEnabled = true;
+ctx.imageSmoothingQuality = 'high';
+const CX = SIZE/2, CY = SIZE/2, R = CX - 4;
+
+/* Outer ring */
+const outerRingEl = document.getElementById('outerRing');
+outerRingEl.style.cssText += `width:${SIZE+28}px;height:${SIZE+28}px;left:-14px;top:-14px;`;
+
+/* Bulb lights */
+const lightsRing = document.getElementById('lightsRing');
+const LR = (SIZE+60)/2;
+lightsRing.style.cssText += `width:${SIZE+60}px;height:${SIZE+60}px;left:-30px;top:-30px;`;
+const LC = ['#FF6348','#FFD700','#7BED9F','#70A1FF','#FF6B9D','#FF9F43'];
+for(let i=0;i<24;i++){
+    const a=2*Math.PI/24*i-Math.PI/2, dot=document.createElement('div');
+    dot.className='light-dot';
+    const sz=11;
+    dot.style.cssText=`width:${sz}px;height:${sz}px;left:${LR+LR*Math.cos(a)-sz/2}px;top:${LR+LR*Math.sin(a)-sz/2}px;background:${LC[i%LC.length]};color:${LC[i%LC.length]};animation-delay:${(i*.04).toFixed(2)}s;`;
+    lightsRing.appendChild(dot);
+}
+
+/* ── Image cache ── */
+const imgCache = {};
+PRODUCTS.forEach(p=>{
+    const img=new Image();
+    const key=p.wheel||p.file;
+    img.src=key;
+    img.onload =()=>{ imgCache[key]=img;  if(N) drawWheel(); };
+    img.onerror=()=>{ imgCache[key]=null; if(N) drawWheel(); };
+    new Image().src=p.file;   /* โหลดภาพเต็มไว้ล่วงหน้าสำหรับป๊อปอัป */
+    if(p.logo){ const lg=new Image(); lg.src=p.logo;
+        lg.onload =()=>{ imgCache[p.logo]=lg;  if(N) drawWheel(); };
+        lg.onerror=()=>{ imgCache[p.logo]=null; }; }
+});
+
+/* ── Fetch stock → filter active products → build wheel ── */
+(async function initWheel(){
+    let active = PRODUCTS;
+    try {
+        const res   = await fetch('/api/stock?t=' + Date.now());
+        const stock = await res.json();
+        const ok    = PRODUCTS.filter(p => (stock[p.name] ?? 0) > 0);
+        if (ok.length > 0) active = ok;
+    } catch(e) { /* offline: show all products */ }
+    segments = active.map((p,i)=>({ file:p.file, wheel:p.wheel||p.file, logo:p.logo, name:p.name, color:SEG_COLORS[i%2] }));
+    N   = segments.length;
+    ARC = (2*Math.PI)/N;
+    angle = -Math.PI/2 - ARC/2;
+    document.getElementById('spinBtn').disabled = false;
+    drawWheel();
+})();
+
+/* ── Hub (center) mascot ── */
+let hubMascotImg = null;
+const _hubImg = new Image();
+_hubImg.src = 'assets/Mascot_01.png';
+_hubImg.onload  = ()=>{ hubMascotImg=_hubImg; drawWheel(); };
+
+/* ── Shake state for hub mascot ── */
+let centerShake = 0, shakePhase = 0;
+
+/* ════════════════════════════════════════════════════════════
+   DRAW WHEEL
+════════════════════════════════════════════════════════════ */
+let angle = 0;   /* set properly in initWheel() */
+
+function roundRect(x,y,w,h,r){
+    ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+/* วางโลโก้ชิดขอบนอก แล้วให้สินค้าใหญ่ที่สุดในพื้นที่ที่เหลือ โดยไม่เกินเส้นแบ่งช่อง/ขอบวงล้อ/ดุมกลาง */
+const _layoutCache = {};
+function layoutSegment(arLogo, arProd, hubRi){
+    const key = N+'|'+arLogo.toFixed(3)+'|'+arProd.toFixed(3);
+    if(_layoutCache[key]) return _layoutCache[key];
+    const t = Math.tan(ARC/2), inner = hubRi + 8, side = 0.9;   /* side: เว้นระยะจากเส้นแบ่งช่อง */
+    const Rmax = R - 10;
+    let top = Rmax, logoBox = null;
+    if(arLogo){
+        const pad = 0;
+        let lo=0, hi=R*0.105;
+        for(let i=0;i<28;i++){
+            const h=(lo+hi)/2, w=h*arLogo, W=w+2*h*pad, H=h*(1+2*pad);
+            const r1=Math.sqrt(Math.max(0,Rmax*Rmax-(W/2)*(W/2))), r0=r1-H;
+            if(W/2 <= r0*t*side) { lo=h; logoBox={h, w, r1:r1-h*pad, r0}; } else hi=h;
+        }
+        if(logoBox) top = logoBox.r0 - R*0.025;
+    }
+    let lo=0, hi=top-inner, prod={h:0,w:0,r1:top};
+    for(let i=0;i<30;i++){
+        const h=(lo+hi)/2, w=h*arProd, r0=top-h;
+        if(r0>=inner && w/2 <= r0*t*side){ lo=h; prod={h,w,r1:top}; } else hi=h;
+    }
+    return (_layoutCache[key] = {logo:logoBox, prod});
+}
+
+function drawWheel(){
+    if (!N) return;
+    ctx.clearRect(0,0,SIZE,SIZE);
+
+    /* gold border */
+    ctx.beginPath(); ctx.arc(CX,CY,R+4,0,Math.PI*2);
+    ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--wheel-rim').trim()||'#FFD700'; ctx.fill();
+    ctx.beginPath(); ctx.arc(CX,CY,R+1,0,Math.PI*2);
+    ctx.fillStyle='#fff'; ctx.fill();
+
+    for(let i=0;i<N;i++){
+        const seg=segments[i];
+        const start=angle+i*ARC, end=start+ARC, mid=start+ARC/2;
+
+        /* segment */
+        ctx.beginPath(); ctx.moveTo(CX,CY);
+        ctx.arc(CX,CY,R,start,end); ctx.closePath();
+        ctx.fillStyle=seg.color; ctx.fill();
+        ctx.strokeStyle='rgba(255,255,255,.55)'; ctx.lineWidth=1.5; ctx.stroke();
+
+        /* ── โลโก้แบรนด์ (ชิดขอบนอก) + สินค้า (ขยายเต็มพื้นที่ที่เหลือ) ── */
+        const hubRi = SIZE * 0.085;
+        const img   = imgCache[seg.wheel];
+        const logo  = imgCache[seg.logo];
+        const lay   = layoutSegment(logo ? logo.naturalWidth/logo.naturalHeight : 0,
+                                    img ? img.naturalWidth/img.naturalHeight : 1, hubRi);
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(CX, CY, R - 1,     start, end);
+        ctx.arc(CX, CY, hubRi + 2, end,   start, true);
+        ctx.closePath();
+        ctx.clip();
+        ctx.translate(CX, CY);
+        ctx.rotate(mid + Math.PI/2);          /* แกน -y = ชี้ออกไปทางขอบวงล้อ */
+
+        if(logo && lay.logo){
+            const L = lay.logo;
+            ctx.shadowColor='rgba(10,4,60,.45)'; ctx.shadowBlur=6; ctx.shadowOffsetY=2;
+            ctx.drawImage(logo, -L.w/2, -L.r1, L.w, L.h);
+            ctx.shadowColor='transparent'; ctx.shadowBlur=0; ctx.shadowOffsetY=0;
+        }
+        if(img){
+            const P = lay.prod;
+            ctx.shadowColor='rgba(0,0,0,.35)'; ctx.shadowBlur=10; ctx.shadowOffsetY=4;
+            ctx.drawImage(img, -P.w/2, -P.r1, P.w, P.h);
+            ctx.shadowColor='transparent'; ctx.shadowBlur=0; ctx.shadowOffsetY=0;
+        } else if(img === null){
+            ctx.fillStyle='rgba(255,255,255,.85)';
+            ctx.font=`bold ${R*0.06}px 'Kanit',sans-serif`;
+            ctx.textAlign='center'; ctx.textBaseline='middle';
+            seg.name.split(' ').slice(0,2).forEach((w,j)=>ctx.fillText(w,0,-R*0.6+j*R*0.07));
+        }
+        /* img===undefined: still loading — segment colour only, no crash */
+        ctx.restore();
+    }
+
+    /* ── Centre hub ── */
+    const hubR=SIZE*0.075;
+    const g=ctx.createRadialGradient(CX,CY,0,CX,CY,hubR);
+    const _cs=getComputedStyle(document.documentElement), _v=(n,d)=>(_cs.getPropertyValue(n).trim()||d);
+    g.addColorStop(0,'#fff'); g.addColorStop(.3,_v('--hub-1','#FFD700'));
+    g.addColorStop(.7,_v('--hub-2','#FF6348')); g.addColorStop(1,_v('--hub-3','#E31D0C'));
+    ctx.beginPath(); ctx.arc(CX,CY,hubR,0,Math.PI*2);
+    ctx.fillStyle=g;
+    ctx.shadowColor='rgba(0,0,0,.3)'; ctx.shadowBlur=12;
+    ctx.fill(); ctx.shadowBlur=0;
+    ctx.strokeStyle='#fff'; ctx.lineWidth=2.5; ctx.stroke();
+
+    /* Hub mascot (Mascot_01 – blue/pink shirt) */
+    if(hubMascotImg){
+        ctx.save();
+        ctx.translate(CX,CY);
+        ctx.rotate(centerShake);
+        ctx.beginPath(); ctx.arc(0,0,hubR*.95,0,Math.PI*2); ctx.clip();
+        const ms=hubR*2.0;
+        ctx.drawImage(hubMascotImg,-ms/2,-ms/2,ms,ms);
+        ctx.restore();
+    }
+
+    /* White centre dot */
+    ctx.beginPath(); ctx.arc(CX,CY,hubR*.38,0,Math.PI*2);
+    ctx.fillStyle='rgba(255,255,255,.65)'; ctx.fill();
+}
+
+/* ════════════════════════════════════════════════════════════
+   SPIN  —  FIXED target angle formula
+════════════════════════════════════════════════════════════ */
+let spinning=false, spinCount=0;
+
+function rebuildSegments(productNames){
+    const nextProducts = productNames
+        .map(name => PRODUCT_BY_NAME[name])
+        .filter(Boolean);
+    if (!nextProducts.length) return;
+    segments = nextProducts.map((p,i)=>({ file:p.file, wheel:p.wheel||p.file, logo:p.logo, name:p.name, color:SEG_COLORS[i%2] }));
+    N   = segments.length;
+    ARC = (2*Math.PI)/N;
+    angle = -Math.PI/2 - ARC/2;
+    drawWheel();
+}
+
+async function requestSpinResult(){
+    const res = await fetch('/api/spin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberId: MEMBER_ID }),
+    });
+    const data = await res.json().catch(()=>({}));
+    if (!res.ok) {
+        const err = new Error(data.error || 'spin_failed');
+        err.status = res.status;
+        err.data = data;
+        throw err;
+    }
+    return data;
+}
+
+async function spin(){
+    if(!N || spinning) return;
+    spinning=true;
+    const spinBtn = document.getElementById('spinBtn');
+    spinBtn.disabled=true;
+    spinBtn.textContent='กำลังตรวจสอบ...';
+
+    let assigned;
+    try {
+        assigned = await requestSpinResult();
+    } catch (err) {
+        spinning=false;
+        spinBtn.disabled=false;
+        spinBtn.textContent='หมุนเลย! 🎯';
+        if (err.status === 409 && err.data?.played) {
+            alert(`รหัสนี้เคยร่วมกิจกรรมแล้ว (ได้รับ: ${err.data.product})`);
+            sessionStorage.removeItem('memberId');
+            window.location.href = 'index.html';
+            return;
+        }
+        if (err.status === 409 && err.data?.error === 'out_of_stock') {
+            alert('สินค้าหมดแล้ว กรุณาติดต่อเจ้าหน้าที่');
+            return;
+        }
+        alert('ระบบกำลังยุ่ง กรุณาลองใหม่อีกครั้ง');
+        return;
+    }
+
+    if (Array.isArray(assigned.activeProducts)) {
+        rebuildSegments(assigned.activeProducts);
+    }
+
+    const targetSeg = segments.findIndex(segment => segment.name === assigned.product);
+    if (targetSeg < 0) {
+        spinning=false;
+        spinBtn.disabled=false;
+        spinBtn.textContent='หมุนเลย! 🎯';
+        alert('ไม่พบสินค้าที่ได้รับบนวงล้อ กรุณาโหลดหน้าใหม่');
+        return;
+    }
+
+    spinBtn.textContent='กำลังหมุน...';
+    document.querySelector('.wheel-scene').classList.add('spinning');
+
+    const extraRot =(6+Math.floor(Math.random()*5))*Math.PI*2;
+
+    /* ✅ Fixed: include -π/2 offset so pointer lands on correct segment */
+    const targetAng = -Math.PI/2 - (targetSeg*ARC + ARC/2);
+    const startAng  = angle;
+    const endAng    = startAng - ((startAng-targetAng) % (Math.PI*2)) - extraRot;
+    const duration  = 5800;
+    const t0        = performance.now();
+
+    function tick(t){
+        const p=Math.min((t-t0)/duration,1);
+        const e=1-Math.pow(1-p,5);
+        angle=startAng+(endAng-startAng)*e;
+
+        /* Hub mascot shake — fast at start, slows with wheel */
+        shakePhase+=0.28*(1-e);
+        centerShake=Math.sin(shakePhase)*0.22*(1-e);
+
+        drawWheel();
+        if(p<1){ requestAnimationFrame(tick); }
+        else{
+            angle=endAng; spinning=false;
+            centerShake=0; shakePhase=0;
+            spinCount++;
+            document.getElementById('countNum').textContent=spinCount;
+            spinBtn.disabled=true;
+            spinBtn.textContent='รับรางวัลแล้ว';
+            showResult(segments[targetSeg]);
+        }
+    }
+    requestAnimationFrame(tick);
+}
+
+/* ════════════════════════════════════════════════════════════
+   RESULT
+════════════════════════════════════════════════════════════ */
+function showResult(seg){
+    const scene=document.querySelector('.wheel-scene');
+    scene.classList.remove('spinning');
+    scene.classList.add('celebrating');
+    setTimeout(()=>scene.classList.remove('celebrating'), 1800);
+
+    const ri=document.getElementById('resultImg');
+    ri.style.display='block'; ri.onerror=()=>{ ri.style.display='none'; };
+    ri.src=seg.file;
+    document.getElementById('resultName').textContent=seg.name;
+    document.getElementById('resultOverlay').classList.add('show');
+    /* ไม่มีปุ่มปิด: แตะที่ใดก็ได้ หรือรอ 10 วินาที จะกลับหน้ากรอกรหัสเอง */
+    setTimeout(closeResult, 10000);
+    launchConfetti();
+}
+
+let _closed=false;
+function closeResult(){
+    if(_closed) return; _closed=true;
+    document.getElementById('resultOverlay').classList.remove('show');
+    /* ── Clear session & go back for next player ── */
+    sessionStorage.removeItem('memberId');
+    window.location.href = 'index.html';
+}
+
+/* ════════════════════════════════════════════════════════════
+   CONFETTI
+════════════════════════════════════════════════════════════ */
+function launchConfetti(){
+    const colors=['#FF6348','#FFD700','#7BED9F','#70A1FF','#FF6B9D','#fff','#E31D0C','#EC008C','#00349E'];
+    for(let i=0;i<160;i++){
+        setTimeout(()=>{
+            const el=document.createElement('div');
+            el.className='confetti-piece';
+            const sz=6+Math.random()*10;
+            el.style.cssText=
+                `left:${Math.random()*100}vw;`+
+                `width:${sz}px;height:${sz}px;`+
+                `background:${colors[Math.floor(Math.random()*colors.length)]};`+
+                `border-radius:${Math.random()>.4?'50%':'3px'};`+
+                `animation-duration:${1.4+Math.random()*2.4}s;`+
+                `animation-delay:${Math.random()*.5}s;`;
+            document.body.appendChild(el);
+            setTimeout(()=>el.remove(),4500);
+        },i*14);
+    }
+}
+</script>
+</body>
+</html>

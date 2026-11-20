@@ -1,0 +1,38 @@
+{
+  "_note": "ข้อมูลงาน I.C.C. 27th Fair & Fest — รายการรางวัลอัปเดตแล้ว (20 พ.ย. 69) แต่ stock ทุกรายการเป็นค่าสมมติ 100 ชิ้น ต้องแก้เป็นจำนวนจริงก่อน deploy",
+
+  "theme": "icc-fair",
+
+  "pageTitle": "I.C.C. 27th Fair & Fest",
+  "titleMain": "I.C.C.",
+  "titleSub": "FAIR & FEST",
+  "badgeLines": ["27th"],
+  "tagline": "ช้อปมาราธอน แลกคะแนนสุดคุ้ม",
+
+  "dateText": "5–6 ธ.ค. 69 · ช้อปยาว 26 ชั่วโมง",
+  "dateNum": "5–6",
+  "dateMonth": "ธ.ค. 69",
+  "venueLines": [],
+
+  "resultMessage": "คุณได้รับสินค้าพิเศษ! 🎁",
+
+  "saturation": 1,
+
+  "memberIdPattern": "",
+  "memberIdError": "⚠️ รหัสสมาชิกไม่ถูกต้อง",
+
+  "prizes": [
+    { "name": "SHEENE Airy Natural Matte Foundation", "file": "sheene-foundation.png", "stock": 100 },
+    { "name": "HONEI V BSC HYA Royal Honey Serum", "file": "bsc-hya-royal-honey-serum.png", "stock": 100 },
+    { "name": "SHEENE Face Color 2in1", "file": "sheene-face-color.png", "stock": 100 },
+    { "name": "กระเป๋า His&Her", "file": "bag-hisher.png", "stock": 100 },
+    { "name": "SHEENE Blink Eye Stick", "file": "sheene-blink-eye-stick.png", "stock": 100 },
+    { "name": "HONEI V BSC Age Defence Sunscreen", "file": "bsc-age-defence-sunscreen.png", "stock": 100 },
+    { "name": "SHEENE Airy Z Perfection Matte Cake Powder", "file": "sheene-airy-z-cake-powder.png", "stock": 100 },
+    { "name": "กระเป๋า ELLE", "file": "bag-elle.png", "stock": 100 },
+    { "name": "SHEENE Airy Z Filter Primer", "file": "sheene-airy-z-filter-primer.png", "stock": 100 },
+    { "name": "ENFANT Extra Mild Face & Body Wipes", "file": "enfant-wipes.png", "stock": 100 },
+    { "name": "SHEENE Airy Z Melting Blush", "file": "sheene-airy-z-melting-blush.png", "stock": 100 },
+    { "name": "GoodAge กู๊ดเอจ Adult Diapers", "file": "goodage-adult-diapers.png", "stock": 100 }
+  ]
+}

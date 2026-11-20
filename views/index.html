@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{PAGE_TITLE}} – ลงทะเบียน</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:ital,wght@0,400;0,700;0,900;1,700;1,900&family=Sriracha&display=swap" rel="stylesheet">
+    <style>
+        {{FILTER_CSS}}
+        * { margin:0; padding:0; box-sizing:border-box; }
+
+        body {
+            background: linear-gradient(180deg,
+                #e8f7ff 0%, #b8e8ff 15%, #5ec4f5 40%, #7fd4f8 70%, #c8eeff 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Kanit', sans-serif;
+            padding: 20px;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* ── Sun ── */
+        .sun {
+            position: fixed; top:-80px; right:-80px;
+            width:260px; height:260px;
+            background: radial-gradient(circle,#fffcb0 0%,#ffe040 35%,rgba(255,220,0,0) 68%);
+            border-radius:50%; animation:sun-pulse 4s ease-in-out infinite;
+            pointer-events:none; z-index:0;
+        }
+        @keyframes sun-pulse {
+            0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.1);opacity:1}
+        }
+
+        /* ── Clouds ── */
+        .cloud{position:fixed;background:#fff;border-radius:60px;pointer-events:none;z-index:0;}
+        .cloud::before,.cloud::after{content:'';position:absolute;background:#fff;border-radius:50%;}
+        .c1{width:180px;height:55px;top:50px;left:-40px;opacity:.9;animation:drift 20s linear infinite;}
+        .c1::before{width:90px;height:90px;top:-46px;left:22px;}
+        .c1::after{width:65px;height:65px;top:-32px;left:78px;}
+        .c2{width:140px;height:46px;top:110px;right:-60px;opacity:.75;animation:drift 28s linear infinite reverse;}
+        .c2::before{width:70px;height:70px;top:-36px;left:18px;}
+        .c2::after{width:52px;height:52px;top:-26px;left:60px;}
+        @keyframes drift{from{transform:translateX(-130%)}to{transform:translateX(120vw)}}
+
+        /* ── Main card ── */
+        .card {
+            position: relative; z-index: 2;
+            background: rgba(255,255,255,.88);
+            backdrop-filter: blur(12px);
+            border-radius: 32px;
+            padding: clamp(28px,5vw,52px) clamp(32px,6vw,64px);
+            max-width: 500px; width: 100%;
+            box-shadow:
+                0 0 0 4px rgba(255,255,255,.6),
+                0 20px 60px rgba(0,80,160,.18);
+            text-align: center;
+            animation: cardIn .6s cubic-bezier(.34,1.56,.64,1) forwards;
+        }
+        @keyframes cardIn{from{transform:scale(.8) translateY(30px);opacity:0}to{transform:scale(1) translateY(0);opacity:1}}
+
+        /* ── Event title inside card ── */
+        .ev-title-main {
+            display: block;
+            font-family:'Kanit',sans-serif; font-weight:900; font-style:italic;
+            font-size: clamp(2.8em, 8vw, 4.4em);
+            line-height: .88;
+            color: #E31D0C;
+            -webkit-text-stroke: clamp(2px,.6vw,4px) #fff;
+            paint-order: stroke fill;
+            filter: drop-shadow(0 4px 8px rgba(200,20,0,.22));
+        }
+        .ev-sub-row {
+            display:flex; align-items:center; justify-content:center;
+            gap: clamp(6px,1.5vw,12px); margin-top: -4px;
+        }
+        .ev-title-sub {
+            font-family:'Kanit',sans-serif; font-weight:900; font-style:italic;
+            font-size: clamp(1.6em, 5vw, 2.8em); line-height:1;
+            color: #E31D0C;
+            -webkit-text-stroke: clamp(1.5px,.4vw,3px) #fff;
+            paint-order: stroke fill;
+        }
+        .ev-badge {
+            flex-shrink:0; display:inline-flex; flex-direction:column;
+            align-items:center; justify-content:center;
+            width:clamp(46px,8vw,66px); height:clamp(46px,8vw,66px);
+            border-radius:50%;
+            background:radial-gradient(circle at 38% 32%,#ff4c2a,#C9200A 65%);
+            border:2px solid #fff;
+            box-shadow:0 3px 0 rgba(130,15,0,.55),0 5px 14px rgba(220,30,0,.4);
+            font-family:'Kanit',sans-serif; font-weight:900; color:#fff;
+            font-size:clamp(.5em,1.2vw,.7em); line-height:1.25;
+        }
+
+        /* ── Game badge ── */
+        .game-badge {
+            display: inline-flex; align-items: center; gap: 10px;
+            background: linear-gradient(135deg, #ff5030, #C9200A);
+            padding: 8px 24px; border-radius: 50px; margin: 14px 0 20px;
+            box-shadow: 0 4px 0 rgba(120,14,0,.5), 0 6px 18px rgba(220,30,0,.35);
+            border: 2px solid rgba(255,255,255,.38);
+        }
+        .game-badge .hw { background:rgba(255,255,255,.95); border-radius:7px; padding:3px 8px; }
+        .game-badge .hw img { height:clamp(18px,2.8vw,30px); width:auto; display:block; }
+        .game-badge-text {
+            font-family:'Kanit',sans-serif; font-weight:900; font-style:italic;
+            font-size:clamp(.95em,2vw,1.45em); color:#fff; letter-spacing:2px;
+        }
+
+        /* ── Form ── */
+        .form-label {
+            font-size:clamp(1em,2.2vw,1.25em); font-weight:700; color:#333;
+            margin-bottom: 6px; display:block;
+        }
+        .form-sub { font-size:.88em; color:#666; margin-bottom:18px; }
+        .member-input {
+            width:100%; padding:clamp(12px,2vw,16px) clamp(18px,3vw,24px);
+            font-family:'Kanit',sans-serif; font-size:clamp(1em,2.2vw,1.25em);
+            font-weight:700; text-align:center; letter-spacing:3px;
+            border: 3px solid #ddd; border-radius:50px;
+            outline:none; transition:border-color .2s, box-shadow .2s;
+            color:#222;
+        }
+        .member-input:focus { border-color:#C9200A; box-shadow:0 0 0 4px rgba(201,32,10,.15); }
+        .member-input::placeholder { color:#bbb; letter-spacing:1px; font-weight:400; }
+        .error-msg { color:#E31D0C; font-size:.88em; font-weight:700; margin-top:8px; min-height:20px; }
+        .submit-btn {
+            margin-top:18px; width:100%;
+            padding:clamp(14px,2.4vw,18px);
+            font-family:'Kanit',sans-serif; font-size:clamp(1.1em,2.4vw,1.45em); font-weight:900;
+            background: linear-gradient(135deg,#ff5030,#C9200A,#a81500);
+            color:#fff; border:none; border-radius:50px; cursor:pointer;
+            box-shadow:0 6px 0 rgba(110,10,0,.55),0 8px 22px rgba(220,30,0,.4);
+            transition:transform .15s, box-shadow .15s;
+            letter-spacing:2px;
+            border: 3px solid rgba(255,255,255,.28);
+        }
+        .submit-btn:hover { transform:translateY(-3px); box-shadow:0 9px 0 rgba(110,10,0,.55),0 12px 30px rgba(220,30,0,.5); }
+        .submit-btn:active { transform:translateY(2px); box-shadow:0 3px 0 rgba(110,10,0,.55); }
+        .submit-btn:disabled { opacity:.5; cursor:not-allowed; transform:none; }
+
+        /* ── Date info ── */
+        .event-info {
+            margin-top:16px; padding:10px 20px;
+            background:rgba(255,255,255,.6); border-radius:20px;
+            font-size:.84em; color:#444; font-weight:700;
+        }
+        /* ── THEME (views/theme-*.css) ── */
+        {{THEME_CSS}}
+    </style>
+{{THEME_HEAD}}
+</head>
+<body>
+{{THEME_DECOR}}
+
+<div class="sun"></div>
+<div class="cloud c1"></div>
+<div class="cloud c2"></div>
+
+<div class="reg">
+  <div class="reg-hero">
+    <div class="reg-title">
+      <span class="ev-title-main">{{TITLE_MAIN}}</span>
+      <div class="ev-sub-row">
+          <span class="ev-title-sub">{{TITLE_SUB}}</span>
+          {{BADGE_INDEX}}
+      </div>
+    </div>
+    <div class="reg-prizes">
+      <p class="reg-prizes-head">สมาชิก HIS&amp;HER ลุ้นรับรางวัลพิเศษ</p>
+      <div class="reg-prize-grid">{{PRIZE_GRID}}</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="game-badge">
+        <span class="hw"><img src="assets/hisher.svg" alt="His&Her"></span>
+        <span class="game-badge-text">Lucky Spin</span>
+    </div>
+
+    <label class="form-label" for="memberId">กรอกรหัสสมาชิก His &amp; Her Plus Point</label>
+    <p class="form-sub">เพื่อร่วมหมุนวงล้อรับรางวัลพิเศษ 🎡</p>
+
+    <input
+        class="member-input"
+        id="memberId"
+        type="text"
+        placeholder="รหัสสมาชิก"
+        autocomplete="off"
+        inputmode="text"
+        maxlength="30"
+    >
+    <div class="error-msg" id="errMsg"></div>
+
+    <button class="submit-btn" id="submitBtn" onclick="submitMember()">
+        เข้าร่วมสนุก!&ensp;🎡
+    </button>
+
+    <div class="event-info">
+        📅&ensp;{{EVENT_INFO}}
+    </div>
+  </div>
+</div>
+
+<script>
+async function submitMember() {
+    const input  = document.getElementById('memberId');
+    const errMsg = document.getElementById('errMsg');
+    const btn    = document.getElementById('submitBtn');
+    const id     = input.value.trim();
+
+    errMsg.textContent = '';
+    if (!id) { errMsg.textContent = '⚠️ กรุณากรอกรหัสสมาชิก'; input.focus(); return; }
+
+    btn.disabled = true;
+    btn.textContent = 'กำลังตรวจสอบ...';
+
+    try {
+        const res  = await fetch(`/api/check/${encodeURIComponent(id)}`);
+        const data = await res.json();
+        if (data.invalid) {
+            errMsg.textContent = data.message || '⚠️ รหัสสมาชิกไม่ถูกต้อง';
+            btn.disabled = false;
+            btn.textContent = 'เข้าร่วมสนุก! 🎡';
+            return;
+        }
+        if (data.played) {
+            errMsg.textContent = `⚠️ รหัสนี้เคยร่วมกิจกรรมแล้ว (ได้รับ: ${data.product})`;
+            btn.disabled = false;
+            btn.textContent = 'เข้าร่วมสนุก! 🎡';
+            return;
+        }
+    } catch (e) {
+        errMsg.textContent = 'ระบบกำลังยุ่ง กรุณาลองใหม่อีกครั้ง';
+        btn.disabled = false;
+        btn.textContent = 'เข้าร่วมสนุก! 🎡';
+        return;
+    }
+
+    /* ── ยังไม่เคยเล่น → ไป game.html ── */
+    sessionStorage.setItem('memberId', id);
+    btn.textContent = 'กำลังโหลด...';
+    window.location.href = 'game.html';
+}
+
+document.getElementById('memberId').addEventListener('keypress', e => {
+    if (e.key === 'Enter') submitMember();
+});
+</script>
+</body>
+</html>
