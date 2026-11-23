@@ -296,3 +296,44 @@ body:has(.reg){ padding:clamp(60px,9vh,100px) clamp(16px,3vw,48px) 70px !importa
 /* มาสคอต His&Her ตัวเดียวข้างวงล้อ */
 .mascots-r{ display:none !important; }
 .mascot-l{ height:clamp(150px,26vw,340px) !important; }
+/* มาสคอตไม่บังวงล้อ: วางข้าง ๆ ชิดฐาน */
+.mascot-l{ margin-right:clamp(4px,1vw,16px) !important; height:clamp(140px,22vw,300px) !important; }
+@media (orientation: portrait){
+  .mascot-l{ height:clamp(110px,17vw,220px) !important; margin-right:2px !important; }
+}
+
+/* ═════════ แมววิ่งมาราธอน ═════════ */
+.runner{ position:relative; display:inline-flex; align-self:flex-end; flex-shrink:0; z-index:3;
+  margin-right:clamp(4px,1vw,16px); animation:dashIn 1.1s cubic-bezier(.2,.9,.3,1.1) both; }
+.runner .mascot-l{ margin:0 !important; transform-origin:50% 100%;
+  animation:runCycle .42s ease-in-out infinite !important; }
+@keyframes dashIn{ 0%{transform:translateX(-70vw)} 75%{transform:translateX(18px)} 100%{transform:translateX(0)} }
+@keyframes runCycle{
+  0%  { transform:translateY(0)     rotate(6deg)  scale(1.03,.96); }
+  25% { transform:translateY(-16px) rotate(9deg)  scale(.98,1.03); }
+  50% { transform:translateY(0)     rotate(6deg)  scale(1.03,.96); }
+  75% { transform:translateY(-12px) rotate(3deg)  scale(.98,1.03); }
+  100%{ transform:translateY(0)     rotate(6deg)  scale(1.03,.96); }
+}
+/* เส้นความเร็วด้านหลัง */
+.runner .speed{ position:absolute; left:-38%; top:30%; width:45%; height:45%; display:flex; flex-direction:column; justify-content:space-around; pointer-events:none; }
+.runner .speed i{ display:block; height:clamp(3px,.5vw,6px); border-radius:6px; background:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.9));
+  animation:speedLine .5s linear infinite; }
+.runner .speed i:nth-child(2){ width:70%; margin-left:30%; animation-delay:.17s; }
+.runner .speed i:nth-child(3){ width:85%; margin-left:15%; animation-delay:.33s; }
+@keyframes speedLine{ 0%{transform:translateX(40%);opacity:0} 30%{opacity:1} 100%{transform:translateX(-60%);opacity:0} }
+/* ฝุ่นใต้เท้า */
+.runner .dust{ position:absolute; left:10%; bottom:2%; width:50%; height:20%; pointer-events:none; }
+.runner .dust i{ position:absolute; bottom:0; width:clamp(10px,1.6vw,20px); aspect-ratio:1; border-radius:50%; background:rgba(255,255,255,.75);
+  animation:puff .84s ease-out infinite; }
+.runner .dust i:nth-child(1){ left:40%; } .runner .dust i:nth-child(2){ left:20%; animation-delay:.28s; } .runner .dust i:nth-child(3){ left:0; animation-delay:.56s; }
+@keyframes puff{ 0%{transform:translate(0,0) scale(.4);opacity:.9} 100%{transform:translate(-160%,-60%) scale(1.6);opacity:0} }
+/* ตอนหมุน: วิ่งเร็วขึ้น */
+.wheel-scene.spinning .runner .mascot-l{ animation:runCycle .22s linear infinite !important; }
+.wheel-scene.spinning .runner .speed i{ animation-duration:.25s; }
+.wheel-scene.spinning .runner .dust i{ animation-duration:.4s; }
+/* ได้รางวัล: กระโดดดีใจ */
+.wheel-scene.celebrating .runner .mascot-l{ animation:mascotCheer .55s cubic-bezier(.34,1.56,.64,1) 3 !important; }
+@media (orientation: portrait){ .runner{ margin-right:2px; } }
+@media (max-width:520px){ .runner .mascot-l{ height:88px !important; } }
+@media (prefers-reduced-motion: reduce){ .runner,.runner *{ animation:none !important; } }

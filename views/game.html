@@ -407,7 +407,7 @@
     <div class="col-right">
         <div class="wheel-scene">
             <!-- mascot ซ้าย -->
-            <img class="mascot-l" src="assets/Mascot_hisher.png" alt="">
+            <span class="runner"><span class="speed" aria-hidden="true"><i></i><i></i><i></i></span><img class="mascot-l" src="assets/Mascot_hisher.png" alt=""><span class="dust" aria-hidden="true"><i></i><i></i><i></i></span></span>
 
             <!-- วงล้อ + ฐาน -->
             <div class="wheel-center">
@@ -536,7 +536,7 @@ PRODUCTS.forEach(p=>{
 /* ── Hub (center) mascot ── */
 let hubMascotImg = null;
 const _hubImg = new Image();
-_hubImg.src = 'assets/Mascot_01.png';
+_hubImg.src = 'assets/Mascot_hub_hisher.png';
 _hubImg.onload  = ()=>{ hubMascotImg=_hubImg; drawWheel(); };
 
 /* ── Shake state for hub mascot ── */
