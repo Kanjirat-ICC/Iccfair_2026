@@ -407,7 +407,11 @@
     <div class="col-right">
         <div class="wheel-scene">
             <!-- mascot ซ้าย -->
-            <span class="runner"><span class="speed" aria-hidden="true"><i></i><i></i><i></i></span><img class="mascot-l" src="assets/Mascot_hisher.png" alt=""><span class="dust" aria-hidden="true"><i></i><i></i><i></i></span></span>
+            <span class="runner">
+                <span class="r-item follow f2"><img src="assets/Follow_2.png" alt=""></span>
+                <span class="r-item follow f1"><img src="assets/Follow_1.png" alt=""></span>
+                <span class="r-item lead"><span class="speed" aria-hidden="true"><i></i><i></i><i></i></span><img class="mascot-l" src="assets/Mascot_hisher.png" alt=""><span class="dust" aria-hidden="true"><i></i><i></i><i></i></span></span>
+            </span>
 
             <!-- วงล้อ + ฐาน -->
             <div class="wheel-center">
@@ -471,9 +475,20 @@ let segments = [], N = 0, ARC = 0;
 ════════════════════════════════════════════════════════════ */
 const DPR  = Math.min(window.devicePixelRatio || 1, 3);
 const PORTRAIT = window.innerHeight > window.innerWidth;
-const SIZE = PORTRAIT
-    ? Math.min(Math.floor(window.innerWidth * 0.66), Math.floor(window.innerHeight * 0.52), 900)
-    : Math.min(Math.floor(window.innerWidth * 0.55) - 24, Math.floor(window.innerHeight * 0.72), 900);
+/* ขนาดวงล้อ: ให้พอดีจอ ทั้งวงล้อ + ไฟรอบวง (60px) + ปุ่มหมุน ต้องอยู่ในจอเสมอ */
+const SIZE = (() => {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const RING = 64, BTN = 100;                                   /* ไฟรอบวงล้อ / ปุ่ม + ระยะห่าง */
+    if (PORTRAIT) {
+        const titleH = document.querySelector('.col-left')?.offsetHeight || 0;
+        const gap = Math.min(70, Math.max(30, vh * 0.05));          /* ระยะห่างหัวข้อ-วงล้อ (.main-layout gap) */
+        const byH = vh - titleH - RING - BTN - vh * 0.08 - gap - 30; /* 30 = ฐานวงล้อ */
+        return Math.max(200, Math.min(Math.floor(vw - RING - 24), Math.floor(byH), 900));
+    }
+    const colW = (document.querySelector('.col-right')?.clientWidth || vw * 0.7) - 20;
+    const byH = vh - RING - BTN - Math.max(40, vh * 0.06);
+    return Math.max(220, Math.min(Math.floor(colW - RING - 16), Math.floor(byH), 900));
+})();
 const canvas = document.getElementById('wheelCanvas');
 canvas.width  = SIZE * DPR;
 canvas.height = SIZE * DPR;
@@ -822,6 +837,68 @@ function launchConfetti(){
         },i*14);
     }
 }
+
+/* ── วางขบวนแมววิ่ง: His&Her นำหน้า ตัวอื่นวิ่งตามหลัง
+      ไม่ดันวงล้อ/ปุ่มให้เยื้อง ไม่บังวงล้อ ไม่ทับหัวข้อ ── */
+(function placeRunner(){
+    const run = document.querySelector('.runner'); if (!run) return;
+    const items = { f2: run.querySelector('.f2'), f1: run.querySelector('.f1') };
+    /* สัดส่วน กว้าง/สูง ของแต่ละตัว (เทียบกับความสูงตัวนำ H) และระยะซ้อนกัน */
+    const AR = { lead: 0.71, f1: 0.644 * 0.68, f2: 1.0 * 0.56 }, OVER = 0.08;
+    const packs = [['f2','f1'], ['f1'], []];
+    const packAR = ks => AR.lead + ks.reduce((s,k) => s + AR[k] - OVER, 0);
+    const apply = (ks, H) => {
+        for (const k of ['f1','f2']) items[k].style.display = ks.includes(k) ? '' : 'none';
+        run.style.setProperty('--H', Math.floor(H) + 'px');
+    };
+    const wheelBox = document.getElementById('wheelWrap').getBoundingClientRect();
+    const BOB = 22;                                               /* เผื่อระยะเด้งตอนวิ่ง */
+
+    if (!PORTRAIT) {
+        /* จอแนวนอน: วิ่งอยู่ข้างวงล้อ ชิดฐาน */
+        document.querySelector('.wheel-center').appendChild(run);
+        run.className = 'runner beside-wheel';
+        const right = wheelBox.left - 34;                         /* ขอบขวาของขบวน */
+        const bottom = wheelBox.bottom + 30;
+        /* วัดตำแหน่งหัวข้อแบบไม่สนแอนิเมชัน (ตอนเปิดหน้าหัวข้อยังเด้งอยู่ ขนาดจะเพี้ยน) */
+        const pos = el => { let x = 0, y = 0, e = el; while (e) { x += e.offsetLeft; y += e.offsetTop; e = e.offsetParent; }
+            return { left: x - scrollX, top: y - scrollY, right: x - scrollX + el.offsetWidth, bottom: y - scrollY + el.offsetHeight }; };
+        const kids = [...document.querySelectorAll('.col-left .game-title-bar, .col-left .title-main, .col-left .sub-row, .col-left .tagline, .col-left .date-circle')].map(pos);
+        const tRight = Math.max(...kids.map(r => r.right)), tBottom = Math.max(...kids.map(r => r.bottom));
+        const maxH = Math.min(320, window.innerHeight * 0.45);
+        for (const ks of packs) {
+            for (let H = maxH; H >= 120; H -= 4) {
+                const left = right - H * packAR(ks) - (ks.length ? 0 : H * 0.22), top = bottom - H - BOB;   /* 0.22 = เส้นความเร็วด้านหลัง */
+                if (left >= 8 && (left >= tRight + 8 || top >= tBottom + 8)) {
+                    if (ks.length && H < 170) break;              /* ตัวนำต้องใหญ่ชัด ไม่งั้นตัดตัวตามออก */
+                    return apply(ks, H);
+                }
+            }
+        }
+        return apply([], 120);
+    }
+    /* จอแนวตั้ง/แคบ: วิ่งอยู่ข้างปุ่มหมุน */
+    document.querySelector('.btn-area').appendChild(run);
+    run.className = 'runner beside-btn';
+    const btnBox = document.getElementById('spinBtn').getBoundingClientRect();
+    const r = wheelBox.width / 2 + 30, cx = wheelBox.left + wheelBox.width / 2, cy = wheelBox.top + wheelBox.height / 2;
+    const fits = (ks, H) => {
+        const xr = btnBox.left - 6, xl = xr - H * packAR(ks);
+        if (xl < 6) return false;
+        /* ส่วนบนของแต่ละตัวต้องอยู่ใต้ขอบวงล้อ ณ ตำแหน่งนั้น */
+        for (let x = xl; x <= xr; x += 6) {
+            const dx = Math.abs(cx - x);
+            if (dx < r && btnBox.bottom + 4 - H - BOB < cy + Math.sqrt(r * r - dx * dx)) return false;
+        }
+        return true;
+    };
+    for (const ks of packs) {
+        for (let H = 170; H >= 64; H -= 3) {
+            if (fits(ks, H)) { if (ks.length && H < 110) break; return apply(ks, H); }
+        }
+    }
+    apply([], 64);
+})();
 </script>
 </body>
 </html>
