@@ -26,11 +26,9 @@ if (fs.existsSync(envFile)) {
   }
 }
 
-const { createStore, OutOfStock, AlreadyPlayed } = require('./store');
+const { createStore, OutOfStock, AlreadyPlayed, NotFound } = require('./store');
 const CFG = JSON.parse(fs.readFileSync(path.join(__dirname, 'event.config.json'), 'utf8'));
-const PRIZES = CFG.prizes;
-const PRIZE_NAMES = PRIZES.map(p => p.name);
-const store = createStore(PRIZES);
+const store = createStore(CFG.prizes);   /* event.config.json ใช้เป็นรายการตั้งต้นครั้งแรกเท่านั้น หลังจากนั้นแก้ที่หลังบ้าน */
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 if (!ADMIN_PASSWORD) console.warn('⚠️  ยังไม่ได้ตั้ง ADMIN_PASSWORD — หลังบ้านจะเข้าไม่ได้');
@@ -44,6 +42,17 @@ function themeFile(suffix) {
   if (!CFG.theme) return '';
   const f = path.join(__dirname, 'views', `theme-${CFG.theme.replace(/[^\w-]/g, '')}.${suffix}`);
   return fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '';
+}
+const hasFile = (...parts) => fs.existsSync(path.join(__dirname, 'public', ...parts));
+/* ภาพของแต่ละรางวัล: รางวัลตั้งต้นใช้ไฟล์ใน public/prizes, รางวัลที่อัปโหลดจากหลังบ้านใช้ /img/<id> */
+function prizeImages(p) {
+  if (p.imgVer) { const u = `img/${encodeURIComponent(p.id)}?v=${p.imgVer}`; return { file: u, wheel: u, logo: '' }; }
+  if (p.file) return {
+    file: 'prizes/' + p.file,
+    wheel: hasFile('prizes', 'wheel', p.file) ? 'prizes/wheel/' + p.file : 'prizes/' + p.file,
+    logo: hasFile('prizes', 'logo', p.file) ? 'prizes/logo/' + p.file : '',
+  };
+  return { file: '', wheel: '', logo: '' };
 }
 const vars = {
   FILTER_CSS: CFG.saturation != null && CFG.saturation !== 1 ? `html { filter: saturate(${Number(CFG.saturation)}); }` : '',
@@ -59,22 +68,24 @@ const vars = {
   DATE_NUM: esc(CFG.dateNum),
   DATE_MONTH: esc(CFG.dateMonth),
   VENUE_HTML: (CFG.venueLines || []).map(esc).join('<br>'),
-  PRIZE_COUNT: String(PRIZES.length),
-  PRIZE_GRID: PRIZES.map(p => {
-    const w = fs.existsSync(path.join(__dirname, 'public', 'prizes', 'wheel', p.file)) ? 'prizes/wheel/' + p.file : 'prizes/' + p.file;
-    return `<figure class="reg-prize"><img src="${esc(w)}" alt="${esc(p.name)}" loading="lazy"></figure>`;
-  }).join(''),
   RESULT_MSG: esc(CFG.resultMessage || 'คุณได้รับสินค้าพิเศษ! 🎁'),
   THEME_HEAD: themeFile('head.html'),
   THEME_DECOR: themeFile('decor.html'),
   THEME_CSS: CFG.theme ? fs.readFileSync(path.join(__dirname, 'views', `theme-${CFG.theme.replace(/[^\w-]/g, '')}.css`), 'utf8') : '',
-  PRODUCTS_JSON: JSON.stringify(PRIZES.map(p => ({ file: 'prizes/' + p.file, wheel: fs.existsSync(path.join(__dirname, 'public', 'prizes', 'wheel', p.file)) ? 'prizes/wheel/' + p.file : 'prizes/' + p.file, logo: fs.existsSync(path.join(__dirname, 'public', 'prizes', 'logo', p.file)) ? 'prizes/logo/' + p.file : '', name: p.name }))).replace(/</g, '\\u003c'),
 };
-function render(file) {
-  return fs.readFileSync(path.join(__dirname, 'views', file), 'utf8')
-    .replace(/\{\{(\w+)\}\}/g, (m, k) => (k in vars ? vars[k] : m));
+const TEMPLATES = Object.fromEntries(['index.html', 'game.html'].map(f => [f, fs.readFileSync(path.join(__dirname, 'views', f), 'utf8')]));
+/* สร้างหน้าใหม่ทุกครั้ง เพราะรายการรางวัลแก้ได้จากหลังบ้าน */
+async function render(file) {
+  const prizes = await store.getPrizes();
+  const v = {
+    ...vars,
+    PRIZE_COUNT: String(prizes.length),
+    PRIZE_GRID: prizes.map(p => `<figure class="reg-prize"><img src="${esc(prizeImages(p).wheel)}" alt="${esc(p.name)}" loading="lazy"></figure>`).join(''),
+    PRODUCTS_JSON: JSON.stringify(prizes.map(p => ({ ...prizeImages(p), name: p.name }))).replace(/</g, '\\u003c'),
+  };
+  return TEMPLATES[file].replace(/\{\{(\w+)\}\}/g, (m, k) => (k in v ? v[k] : m));
 }
-const PAGES = { 'index.html': render('index.html'), 'game.html': render('game.html') };
+const stockMap = prizes => Object.fromEntries(prizes.map(p => [p.name, p.qty]));
 
 /* ════════════════ HELPERS ════════════════ */
 const MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.ico': 'image/x-icon', '.css': 'text/css', '.js': 'text/javascript' };
@@ -137,27 +148,88 @@ button{width:100%;margin-top:16px;border:0;border-radius:30px;padding:12px 18px;
 <div class="err">${esc(err)}</div><button type="submit">เข้าสู่ระบบ</button></form></body></html>`;
 }
 
-async function dashboard(msg = '') {
-  const [stock, plays] = await Promise.all([store.getStock(), store.listPlays()]);
+async function dashboard(msg = '', isErr = false) {
+  const [prizes, plays] = await Promise.all([store.getPrizes(), store.listPlays()]);
   const given = {}; plays.forEach(p => { given[p.product] = (given[p.product] || 0) + 1; });
-  const remain = PRIZE_NAMES.reduce((s, n) => s + (stock[n] || 0), 0);
-  const rows = PRIZES.map(p => `<tr class="${(stock[p.name] || 0) > 0 ? '' : 'zero'}"><td>${esc(p.name)}</td><td>${given[p.name] || 0}</td>
-<td><form method="post" action="/admin/stock" class="row"><input type="hidden" name="name" value="${esc(p.name)}">
-<input type="number" name="qty" min="0" value="${stock[p.name] || 0}"><button class="ghost">บันทึก</button></form></td></tr>`).join('');
+  const remain = prizes.reduce((s, p) => s + p.qty, 0);
+  const thumb = p => { const w = prizeImages(p).wheel; return w ? `<img class="th" src="/${esc(w)}" alt="">` : '<div class="th none">ไม่มีรูป</div>'; };
+  const rows = prizes.map(p => `<tr class="${p.qty > 0 ? '' : 'zero'}">
+<td>${thumb(p)}</td>
+<td colspan="3"><form method="post" action="/admin/prize/save" class="row pform">
+  <input type="hidden" name="id" value="${esc(p.id)}"><input type="hidden" name="img" class="imgdata">
+  <input type="text" name="name" value="${esc(p.name)}" maxlength="80" required class="nm">
+  <span class="given">แจกแล้ว ${given[p.name] || 0}</span>
+  <label class="lbl">คงเหลือ <input type="number" name="qty" min="0" max="100000" value="${p.qty}" required></label>
+  <label class="btn ghost file">เปลี่ยนรูป<input type="file" accept="image/png,image/jpeg,image/webp" class="imgfile" hidden></label>
+  <button>บันทึก</button>
+</form></td>
+<td><form method="post" action="/admin/prize/delete" onsubmit="return confirm('ลบ &quot;${esc(p.name)}&quot; ออกจากวงล้อ?')"><input type="hidden" name="id" value="${esc(p.id)}"><button class="danger">ลบ</button></form></td>
+</tr>`).join('');
   const recent = plays.slice(-50).reverse().map(p => `<tr><td>${thaiTime(p.at)}</td><td>${esc(p.memberId)}</td><td>${esc(p.product)}</td>
 <td><form method="post" action="/admin/delete-play" onsubmit="return confirm('ลบรายการนี้? (สต็อกจะไม่ถูกคืน)')"><input type="hidden" name="memberId" value="${esc(p.memberId)}"><button class="ghost">ลบ</button></form></td></tr>`).join('');
   return `<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>หลังบ้าน - ${esc(CFG.pageTitle)}</title>${FONT}<style>${ADMIN_CSS}</style></head><body><div class="wrap">
+<title>หลังบ้าน - ${esc(CFG.pageTitle)}</title>${FONT}<style>${ADMIN_CSS}
+.th{width:64px;height:64px;object-fit:contain;background:#f4f4fa;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:.7em;color:#999}
+.pform .nm{width:min(320px,100%)}.pform input[type=number]{width:90px}.given{color:#666;font-size:.9em;min-width:84px}
+.lbl{display:flex;gap:6px;align-items:center;font-size:.9em}.file{cursor:pointer;padding:6px 12px}.file.picked{background:#e8fff0;border-color:#2a9d55;color:#2a9d55}
+.add{background:#fff;border-radius:14px;padding:16px;box-shadow:0 4px 14px rgba(0,0,0,.07)}.add .preview{width:80px;height:80px;object-fit:contain;background:#f4f4fa;border-radius:10px}
+.msg.err{background:#fff0f0;border-color:#e99}input[type=text].nm,.add input[type=text]{width:260px;padding:6px 8px;border:2px solid #ddd;border-radius:8px;font-family:inherit}
+</style></head><body><div class="wrap">
 <div class="row" style="justify-content:space-between"><div><h1>Lucky Spin — หลังบ้าน</h1><div class="sub">${esc(CFG.pageTitle)} · ${esc(CFG.dateText)} · ที่เก็บข้อมูล: ${store.kind}</div></div>
 <div class="row"><a class="btn" href="/admin/export.csv">⬇ Export CSV</a><a class="btn ghost" href="/admin">รีเฟรช</a><a class="btn danger" href="/admin/logout">ออกจากระบบ</a></div></div>
-${msg ? `<div class="msg">${esc(msg)}</div>` : ''}
+${msg ? `<div class="msg${isErr ? ' err' : ''}">${esc(msg)}</div>` : ''}
 <div class="cards"><div class="card">ผู้เล่นทั้งหมด<b>${plays.length}</b></div><div class="card">รางวัลคงเหลือรวม<b>${remain}</b></div>
-<div class="card">รางวัลที่ยังมีของ<b>${PRIZE_NAMES.filter(n => (stock[n] || 0) > 0).length}/${PRIZES.length}</b></div></div>
-<h2>สต็อกรางวัล</h2><table><tr><th>รางวัล</th><th>แจกไปแล้ว</th><th>คงเหลือ (แก้ได้)</th></tr>${rows}</table>
+<div class="card">รางวัลที่ยังมีของ<b>${prizes.filter(p => p.qty > 0).length}/${prizes.length}</b></div></div>
+
+<h2>รางวัลบนวงล้อ</h2>
+<p class="sub">แก้ชื่อ/จำนวนคงเหลือ แล้วกด "บันทึก" ทีละแถว · รางวัลที่คงเหลือ 0 จะหายจากวงล้ออัตโนมัติ · ของที่เหลือมากจะมีโอกาสออกมากกว่า</p>
+<table>${rows || '<tr><td>ยังไม่มีรางวัล</td></tr>'}</table>
+
+<h2>เพิ่มรางวัลใหม่</h2>
+<form method="post" action="/admin/prize/add" class="row add pform">
+  <input type="hidden" name="img" class="imgdata">
+  <img class="preview" alt="" hidden>
+  <input type="text" name="name" placeholder="ชื่อสินค้า" maxlength="80" required>
+  <label class="lbl">จำนวน <input type="number" name="qty" min="0" max="100000" value="10" required></label>
+  <label class="btn ghost file">เลือกรูป<input type="file" accept="image/png,image/jpeg,image/webp" class="imgfile" hidden></label>
+  <button>+ เพิ่มรางวัล</button>
+</form>
+<p class="sub">รูปแนะนำ: PNG พื้นหลังโปร่งใส ภาพสินค้าชิ้นเดียว · ระบบจะย่อรูปให้อัตโนมัติ</p>
+
 <h2>ผู้เล่นล่าสุด (50 รายการ)</h2><table><tr><th>เวลา</th><th>รหัสสมาชิก</th><th>รางวัลที่ได้</th><th></th></tr>${recent || '<tr><td colspan="4">ยังไม่มีผู้เล่น</td></tr>'}</table>
-<h2>รีเซ็ตทั้งหมด</h2><form method="post" action="/admin/reset" class="row" onsubmit="return confirm('ลบผู้เล่นทั้งหมดและคืนสต็อกตามไฟล์ตั้งค่า?')">
-<span>พิมพ์คำว่า RESET เพื่อยืนยัน (ลบประวัติผู้เล่นทั้งหมด + ตั้งสต็อกกลับเป็นค่าเริ่มต้น)</span><input type="text" name="confirm" placeholder="RESET"><button class="danger">รีเซ็ต</button></form>
-<p class="sub" style="margin-top:24px">แนะนำ: Export CSV เก็บไว้ก่อนรีเซ็ตทุกครั้ง</p></div></body></html>`;
+<h2>รีเซ็ตทั้งหมด</h2><form method="post" action="/admin/reset" class="row" onsubmit="return confirm('ลบผู้เล่นทั้งหมดและคืนจำนวนรางวัลเป็นค่าที่บันทึกล่าสุด?')">
+<span>พิมพ์คำว่า RESET เพื่อยืนยัน (ลบประวัติผู้เล่นทั้งหมด + คืนจำนวนรางวัลเป็นค่าที่บันทึกล่าสุดของแต่ละรายการ)</span><input type="text" name="confirm" placeholder="RESET"><button class="danger">รีเซ็ต</button></form>
+<p class="sub" style="margin-top:24px">แนะนำ: Export CSV เก็บไว้ก่อนรีเซ็ตทุกครั้ง</p></div>
+<script>
+/* ย่อรูปในเบราว์เซอร์ก่อนส่ง (ด้านยาวสุด 600px) */
+function shrink(file){ return new Promise((ok,bad)=>{ const r=new FileReader(); r.onerror=bad; r.onload=()=>{ const im=new Image(); im.onerror=bad; im.onload=()=>{
+  let s=Math.min(1,600/Math.max(im.width,im.height)); const c=document.createElement('canvas'); c.width=Math.round(im.width*s); c.height=Math.round(im.height*s);
+  c.getContext('2d').drawImage(im,0,0,c.width,c.height); let d=c.toDataURL('image/webp',.85); if(!d.startsWith('data:image/webp')) d=c.toDataURL('image/png'); ok(d); }; im.src=r.result; }; r.readAsDataURL(file); }); }
+document.querySelectorAll('.pform').forEach(f=>{
+  const inp=f.querySelector('.imgfile'), hid=f.querySelector('.imgdata'), lab=inp.closest('label'), pv=f.querySelector('.preview');
+  inp.addEventListener('change', async ()=>{ if(!inp.files[0]) return; lab.firstChild.textContent='กำลังย่อรูป…';
+    try{ hid.value=await shrink(inp.files[0]); lab.firstChild.textContent='✓ '+inp.files[0].name.slice(0,18); lab.classList.add('picked'); if(pv){pv.src=hid.value;pv.hidden=false;} }
+    catch(e){ lab.firstChild.textContent='รูปใช้ไม่ได้'; hid.value=''; } });
+  f.addEventListener('submit', e=>{ if(f.action.endsWith('/add') && !hid.value){ e.preventDefault(); alert('กรุณาเลือกรูปสินค้า'); } });
+});
+</script></body></html>`;
+}
+
+async function validatePrizeForm(f) {
+  const id = String(f.get('id') || '');
+  const name = String(f.get('name') || '').trim().replace(/\s+/g, ' ');
+  const qty = parseInt(f.get('qty'), 10);
+  const img = String(f.get('img') || '');
+  if (!name || name.length > 80) return { error: 'ชื่อสินค้าต้องมี 1–80 ตัวอักษร' };
+  if (!Number.isInteger(qty) || qty < 0 || qty > 100000) return { error: 'จำนวนต้องเป็นตัวเลข 0–100000' };
+  if (img) {
+    const m = img.match(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/);
+    if (!m) return { error: 'ไฟล์รูปไม่ถูกต้อง (ใช้ PNG, JPG หรือ WEBP)' };
+    if (img.length > 380000) return { error: 'รูปใหญ่เกินไป ลองใช้รูปที่เล็กลง' };
+  }
+  const dup = (await store.getPrizes()).find(x => x.id !== id && x.name.toLowerCase() === name.toLowerCase());
+  if (dup) return { error: `มีรางวัลชื่อ "${name}" อยู่แล้ว` };
+  return { id, name, qty, img };
 }
 
 /* ════════════════ ROUTER ════════════════ */
@@ -166,8 +238,14 @@ async function handle(req, res) {
   const p = decodeURIComponent(url.pathname);
 
   /* หน้าเว็บผู้เล่น */
-  if (p === '/' || p === '/index.html') return send(res, 200, PAGES['index.html']);
-  if (p === '/game.html') return send(res, 200, PAGES['game.html']);
+  if (p === '/' || p === '/index.html') return send(res, 200, await render('index.html'));
+  if (p === '/game.html') return send(res, 200, await render('game.html'));
+  if (p.startsWith('/img/')) {
+    const data = await store.getImage(p.slice(5));
+    const m = data && data.match(/^data:(image\/(?:png|jpeg|webp));base64,(.+)$/);
+    if (!m) return send(res, 404, 'Not found', 'text/plain');
+    return send(res, 200, Buffer.from(m[2], 'base64'), m[1], { 'Cache-Control': 'public, max-age=31536000, immutable' });
+  }
 
   /* API */
   if (p.startsWith('/api/check/') && req.method === 'GET') {
@@ -176,15 +254,14 @@ async function handle(req, res) {
     const play = await store.getPlay(id);
     return json(res, 200, play ? { played: true, product: play.product } : { played: false });
   }
-  if (p === '/api/stock' && req.method === 'GET') return json(res, 200, await store.getStock());
+  if (p === '/api/stock' && req.method === 'GET') return json(res, 200, stockMap(await store.getPrizes()));
   if (p === '/api/spin' && req.method === 'POST') {
     let body = {}; try { body = JSON.parse(await readBody(req)); } catch { /* ignore */ }
     const id = cleanId(body.memberId);
     if (!validId(id)) return json(res, 400, { error: 'invalid_member' });
     try {
-      const rec = await store.spin(id, PRIZE_NAMES);
-      const stock = await store.getStock();
-      const active = PRIZE_NAMES.filter(n => (stock[n] || 0) > 0 || n === rec.product);
+      const rec = await store.spin(id);
+      const active = (await store.getPrizes()).filter(x => x.qty > 0 || x.id === rec.prizeId).map(x => x.name);
       return json(res, 200, { product: rec.product, activeProducts: active });
     } catch (e) {
       if (e instanceof AlreadyPlayed) return json(res, 409, { played: true, product: e.product });
@@ -213,17 +290,26 @@ async function handle(req, res) {
       return send(res, 200, csv, 'text/csv; charset=utf-8', { 'Content-Disposition': `attachment; filename="${fname}"` });
     }
     if (req.method === 'POST') {
-      const f = new URLSearchParams(await readBody(req));
-      let msg = '';
-      if (p === '/admin/stock') {
-        const name = f.get('name'), qty = Math.max(0, parseInt(f.get('qty'), 10) || 0);
-        if (PRIZE_NAMES.includes(name)) { await store.setStock(name, qty); msg = `ตั้งสต็อก "${name}" = ${qty}`; }
+      const f = new URLSearchParams(await readBody(req, 1.5e6));
+      let msg = '', isErr = false;
+      if (p === '/admin/prize/save' || p === '/admin/prize/add') {
+        const r = await validatePrizeForm(f);
+        if (r.error) { msg = r.error; isErr = true; }
+        else if (p === '/admin/prize/add') {
+          if (!r.img) { msg = 'กรุณาเลือกรูปสินค้า'; isErr = true; }
+          else { await store.addPrize(r); msg = `เพิ่ม "${r.name}" แล้ว`; }
+        } else {
+          try { await store.savePrize(r.id, r); msg = `บันทึก "${r.name}" แล้ว (คงเหลือ ${r.qty})`; }
+          catch (e) { if (!(e instanceof NotFound)) throw e; msg = 'ไม่พบรางวัลนี้ (อาจถูกลบไปแล้ว)'; isErr = true; }
+        }
+      } else if (p === '/admin/prize/delete') {
+        await store.deletePrize(String(f.get('id') || '')); msg = 'ลบรางวัลแล้ว';
       } else if (p === '/admin/delete-play') {
         await store.deletePlay(cleanId(f.get('memberId'))); msg = 'ลบรายการแล้ว';
       } else if (p === '/admin/reset') {
         if (f.get('confirm') === 'RESET') { await store.resetAll(); msg = 'รีเซ็ตเรียบร้อย'; } else msg = 'ไม่ได้รีเซ็ต — ต้องพิมพ์ RESET ให้ถูกต้อง';
       }
-      return send(res, 200, await dashboard(msg));
+      return send(res, 200, await dashboard(msg, isErr));
     }
     if (p === '/admin' || p === '/admin/') return send(res, 200, await dashboard());
   }
