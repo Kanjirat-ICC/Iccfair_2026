@@ -293,3 +293,6 @@ body:has(.reg){ padding:clamp(60px,9vh,100px) clamp(16px,3vw,48px) 70px !importa
 .mascots-r img:nth-child(1){ height:clamp(80px,11vw,170px) !important; }
 .mascots-r img:nth-child(2){ height:clamp(70px,10vw,150px) !important; }
 .mascot-l{ margin-right:clamp(-80px,-6vw,-30px) !important; }
+/* มาสคอต His&Her ตัวเดียวข้างวงล้อ */
+.mascots-r{ display:none !important; }
+.mascot-l{ height:clamp(150px,26vw,340px) !important; }

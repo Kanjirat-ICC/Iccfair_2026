@@ -407,7 +407,7 @@
     <div class="col-right">
         <div class="wheel-scene">
             <!-- mascot ซ้าย -->
-            <img class="mascot-l" src="assets/Mascot_02.png" alt="">
+            <img class="mascot-l" src="assets/Mascot_hisher.png" alt="">
 
             <!-- วงล้อ + ฐาน -->
             <div class="wheel-center">
@@ -658,8 +658,8 @@ function drawWheel(){
     }
 
     /* White centre dot */
-    ctx.beginPath(); ctx.arc(CX,CY,hubR*.38,0,Math.PI*2);
-    ctx.fillStyle='rgba(255,255,255,.65)'; ctx.fill();
+    if(!hubMascotImg){ ctx.beginPath(); ctx.arc(CX,CY,hubR*.38,0,Math.PI*2);
+    ctx.fillStyle='rgba(255,255,255,.65)'; ctx.fill(); }
 }
 
 /* ════════════════════════════════════════════════════════════
