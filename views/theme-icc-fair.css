@@ -280,3 +280,16 @@ body:has(.reg){ padding:clamp(60px,9vh,100px) clamp(16px,3vw,48px) 70px !importa
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{ animation-duration:.01ms !important; animation-iteration-count:1 !important; }
 }
+
+/* มาสคอตฉลองในป๊อปอัปรางวัล */
+.result-card{ overflow:visible !important; margin-top:70px; }
+.result-mascot{ position:absolute !important; width:150px; right:-60px; top:-95px; z-index:3 !important;
+  filter:drop-shadow(0 10px 16px rgba(5,2,40,.5)); animation:popIn2 .7s cubic-bezier(.34,1.7,.64,1) .25s both, bob 2.2s ease-in-out 1s infinite; }
+.result-card::before{ border-radius:32px; }
+@media (max-width:520px){ .result-mascot{ width:110px; right:-18px; top:-80px; } }
+/* มาสคอตชุดใหม่ตัวใหญ่ขึ้นเล็กน้อย */
+.mascot-l{ height:clamp(120px,22vw,300px) !important; }
+.mascots-r{ margin-left:clamp(-110px,-8vw,-40px) !important; }
+.mascots-r img:nth-child(1){ height:clamp(80px,11vw,170px) !important; }
+.mascots-r img:nth-child(2){ height:clamp(70px,10vw,150px) !important; }
+.mascot-l{ margin-right:clamp(-80px,-6vw,-30px) !important; }
