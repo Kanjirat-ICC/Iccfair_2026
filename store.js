@@ -115,20 +115,40 @@ function dynamoStore(cfgPrizes, table, region) {
     }
   }
 
-  /* ใส่รางวัลตั้งต้นครั้งแรกครั้งเดียว (ย้ายจำนวนคงเหลือจากรูปแบบเก่า STOCK#<ชื่อ> ถ้ามี) */
+  /* ใส่รางวัลจาก event.config.json ที่ยังไม่เคยใส่ (จำ id ที่ใส่แล้วไว้ใน META#seeded)
+     - ครั้งแรก: ย้ายจำนวนคงเหลือจากรูปแบบเก่า STOCK#<ชื่อ> ถ้ามี
+     - รายการใหม่ที่ชื่อตรงกับรางวัลที่อัปโหลดไว้ในหลังบ้าน: ใช้รูปจากไฟล์แทนรูปที่อัปโหลด (ไม่สร้างรายการซ้ำ)
+     - รางวัลที่ลบในหลังบ้านแล้วจะไม่ถูกใส่กลับ */
   async function seed() {
-    const meta = await send(new ddb.GetItemCommand({ TableName: table, Key: { pk: S('META#seeded') }, ConsistentRead: true }));
-    if (meta.Item) return;
+    const list = seedList(cfgPrizes);
+    const meta = (await send(new ddb.GetItemCommand({ TableName: table, Key: { pk: S('META#seeded') }, ConsistentRead: true }))).Item;
+    let done = new Set();
+    if (meta) done = new Set(meta.ids ? meta.ids.SS : list.slice(0, 12).map(p => p.id));   /* เวอร์ชันแรกใส่ไว้ 12 รายการ */
+    const todo = list.filter(p => !done.has(p.id));
+    if (!todo.length) return;
     const old = {};
-    (await scanAll('STOCK#')).forEach(i => { old[i.pk.S.slice(6)] = Number(i.qty.N); });
-    for (const p of seedList(cfgPrizes)) {
-      const qty = p.name in old ? old[p.name] : p.qty;
-      await send(new ddb.PutItemCommand({
-        TableName: table, ConditionExpression: 'attribute_not_exists(pk)',
-        Item: { pk: S('PRIZE#' + p.id), id: S(p.id), name: S(p.name), qty: N(qty), init: N(p.init), ord: N(p.ord), file: S(p.file) },
-      })).catch(e => { if (e.name !== 'ConditionalCheckFailedException') throw e; });
+    if (!meta) (await scanAll('STOCK#')).forEach(i => { old[i.pk.S.slice(6)] = Number(i.qty.N); });
+    const existing = (await scanAll('PRIZE#')).map(toPrize);
+    let ord = Math.max(-1, ...existing.map(p => p.ord));
+    for (const p of todo) {
+      const same = existing.find(x => x.name.toLowerCase() === p.name.toLowerCase());
+      if (same) {
+        await send(new ddb.UpdateItemCommand({
+          TableName: table, Key: { pk: S('PRIZE#' + same.id) },
+          UpdateExpression: 'SET #f = :f, qty = :q, init = :q REMOVE imgVer, hasLogo, hasFull',
+          ExpressionAttributeNames: { '#f': 'file' }, ExpressionAttributeValues: { ':f': S(p.file), ':q': N(p.qty) },
+        }));
+        for (const s of IMG_SLOTS) await send(new ddb.DeleteItemCommand({ TableName: table, Key: { pk: S('IMG#' + same.id + s) } }));
+      } else {
+        const qty = p.name in old ? old[p.name] : p.qty;
+        await send(new ddb.PutItemCommand({
+          TableName: table, ConditionExpression: 'attribute_not_exists(pk)',
+          Item: { pk: S('PRIZE#' + p.id), id: S(p.id), name: S(p.name), qty: N(qty), init: N(p.init), ord: N(meta ? ++ord : p.ord), file: S(p.file) },
+        })).catch(e => { if (e.name !== 'ConditionalCheckFailedException') throw e; });
+      }
+      done.add(p.id);
     }
-    await send(new ddb.PutItemCommand({ TableName: table, Item: { pk: S('META#seeded'), at: S(new Date().toISOString()) } }));
+    await send(new ddb.PutItemCommand({ TableName: table, Item: { pk: S('META#seeded'), at: S(new Date().toISOString()), ids: { SS: [...done] } } }));
   }
   /* ทำแบบ lazy: ถ้าฐานข้อมูลยังเชื่อมไม่ได้ เซิร์ฟเวอร์ไม่ล่ม และจะลองใหม่ครั้งถัดไป */
   let ready = null;

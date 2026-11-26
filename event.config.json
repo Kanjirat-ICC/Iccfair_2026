@@ -33,6 +33,9 @@
     { "name": "SHEENE Airy Z Filter Primer", "file": "sheene-airy-z-filter-primer.png", "stock": 100 },
     { "name": "ENFANT Extra Mild Face & Body Wipes", "file": "enfant-wipes.png", "stock": 100 },
     { "name": "SHEENE Airy Z Melting Blush", "file": "sheene-airy-z-melting-blush.png", "stock": 100 },
-    { "name": "GoodAge กู๊ดเอจ Adult Diapers", "file": "goodage-adult-diapers.png", "stock": 100 }
+    { "name": "GoodAge กู๊ดเอจ Adult Diapers", "file": "goodage-adult-diapers.png", "stock": 100 },
+    { "name": "HONEI V BSC Facial Foam", "file": "bsc-honei-v-facial-foam.png", "stock": 100 },
+    { "name": "BB Powder with miracle Pink", "file": "sheene-kawaii-bb-powder.png", "stock": 100 },
+    { "name": "SHEENE JU JUB", "file": "sheene-ju-jub.png", "stock": 100 }
   ]
 }
