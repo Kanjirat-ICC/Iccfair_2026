@@ -26,6 +26,7 @@ function pickWeighted(prizes) {
   return pool[pool.length - 1];
 }
 
+const IMG_SLOTS = ['', ':logo', ':full'];
 const newId = () => 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const seedList = cfgPrizes => cfgPrizes.map((p, i) => ({
   id: p.file.replace(/\.[a-z]+$/i, ''), name: p.name, qty: p.stock, init: p.stock, ord: i, file: p.file,
@@ -38,6 +39,13 @@ function memoryStore(cfgPrizes) {
   const images = new Map();
   const plays = new Map();
   const clone = o => JSON.parse(JSON.stringify(o));
+  /* ชุดรูปของรางวัลที่อัปโหลด: รูปสินค้า (บนวงล้อ), โลโก้ (ขอบนอกวงล้อ), รูปเต็ม (ป๊อปอัป) */
+  const setImgs = (p, { img, logo, full }) => {
+    images.set(p.id, img);
+    logo ? images.set(p.id + ':logo', logo) : images.delete(p.id + ':logo');
+    full ? images.set(p.id + ':full', full) : images.delete(p.id + ':full');
+    p.imgVer = Date.now(); p.hasLogo = !!logo; p.hasFull = !!full;
+  };
   return {
     kind: 'memory',
     async getPrizes() { return [...prizes.values()].map(clone).sort(byOrd); },
@@ -52,19 +60,20 @@ function memoryStore(cfgPrizes) {
       plays.set(memberId, rec);
       return rec;
     },
-    async savePrize(id, { name, qty, img }) {
+    async savePrize(id, { name, qty, img, logo, full }) {
       const p = prizes.get(id); if (!p) throw new NotFound();
       p.name = name; p.qty = qty; p.init = qty;
-      if (img) { images.set(id, img); p.imgVer = Date.now(); }
+      if (img) setImgs(p, { img, logo, full });
     },
-    async addPrize({ name, qty, img }) {
+    async addPrize({ name, qty, img, logo, full }) {
       const id = newId();
       const ord = Math.max(-1, ...[...prizes.values()].map(p => p.ord)) + 1;
-      prizes.set(id, { id, name, qty, init: qty, ord, imgVer: img ? Date.now() : undefined });
-      if (img) images.set(id, img);
+      const p = { id, name, qty, init: qty, ord };
+      if (img) setImgs(p, { img, logo, full });
+      prizes.set(id, p);
       return id;
     },
-    async deletePrize(id) { prizes.delete(id); images.delete(id); },
+    async deletePrize(id) { prizes.delete(id); for (const s of IMG_SLOTS) images.delete(id + s); },
     async listPlays() { return [...plays.values()].sort((a, b) => a.at.localeCompare(b.at)); },
     async deletePlay(id) { plays.delete(id); },
     async resetAll() { plays.clear(); prizes.forEach(p => { p.qty = p.init; }); },
@@ -95,7 +104,16 @@ function dynamoStore(cfgPrizes, table, region) {
   const toPrize = i => ({
     id: i.id.S, name: i.name.S, qty: Number(i.qty.N), init: Number((i.init || i.qty).N), ord: Number(i.ord.N),
     file: i.file ? i.file.S : undefined, imgVer: i.imgVer ? Number(i.imgVer.N) : undefined,
+    hasLogo: !!(i.hasLogo && i.hasLogo.BOOL), hasFull: !!(i.hasFull && i.hasFull.BOOL),
   });
+  /* เก็บชุดรูป (สินค้า/โลโก้/รูปเต็ม) แยกเป็นรายการ IMG#<id>, IMG#<id>:logo, IMG#<id>:full */
+  async function putImgs(id, { img, logo, full }) {
+    for (const [slot, data] of [['', img], [':logo', logo], [':full', full]]) {
+      const Key = { pk: S('IMG#' + id + slot) };
+      if (data) await send(new ddb.PutItemCommand({ TableName: table, Item: { ...Key, data: S(data) } }));
+      else if (slot) await send(new ddb.DeleteItemCommand({ TableName: table, Key }));
+    }
+  }
 
   /* ใส่รางวัลตั้งต้นครั้งแรกครั้งเดียว (ย้ายจำนวนคงเหลือจากรูปแบบเก่า STOCK#<ชื่อ> ถ้ามี) */
   async function seed() {
@@ -165,13 +183,14 @@ function dynamoStore(cfgPrizes, table, region) {
       }
       throw new OutOfStock();
     },
-    async savePrize(id, { name, qty, img }) {
+    async savePrize(id, { name, qty, img, logo, full }) {
       const names = { '#n': 'name' };
       const vals = { ':n': S(name), ':q': N(qty) };
       let expr = 'SET #n = :n, qty = :q, init = :q';
       if (img) {
-        await send(new ddb.PutItemCommand({ TableName: table, Item: { pk: S('IMG#' + id), data: S(img) } }));
-        expr += ', imgVer = :v'; vals[':v'] = N(Date.now());
+        await putImgs(id, { img, logo, full });
+        expr += ', imgVer = :v, hasLogo = :hl, hasFull = :hf';
+        vals[':v'] = N(Date.now()); vals[':hl'] = { BOOL: !!logo }; vals[':hf'] = { BOOL: !!full };
       }
       try {
         await send(new ddb.UpdateItemCommand({
@@ -180,20 +199,20 @@ function dynamoStore(cfgPrizes, table, region) {
         }));
       } catch (e) { if (e.name === 'ConditionalCheckFailedException') throw new NotFound(); throw e; }
     },
-    async addPrize({ name, qty, img }) {
+    async addPrize({ name, qty, img, logo, full }) {
       const id = newId();
       const ord = Math.max(-1, ...(await store.getPrizes()).map(p => p.ord)) + 1;
       const item = { pk: S('PRIZE#' + id), id: S(id), name: S(name), qty: N(qty), init: N(qty), ord: N(ord) };
       if (img) {
-        await send(new ddb.PutItemCommand({ TableName: table, Item: { pk: S('IMG#' + id), data: S(img) } }));
-        item.imgVer = N(Date.now());
+        await putImgs(id, { img, logo, full });
+        item.imgVer = N(Date.now()); item.hasLogo = { BOOL: !!logo }; item.hasFull = { BOOL: !!full };
       }
       await send(new ddb.PutItemCommand({ TableName: table, Item: item }));
       return id;
     },
     async deletePrize(id) {
       await send(new ddb.DeleteItemCommand({ TableName: table, Key: { pk: S('PRIZE#' + id) } }));
-      await send(new ddb.DeleteItemCommand({ TableName: table, Key: { pk: S('IMG#' + id) } }));
+      for (const s of IMG_SLOTS) await send(new ddb.DeleteItemCommand({ TableName: table, Key: { pk: S('IMG#' + id + s) } }));
     },
     async listPlays() {
       return (await scanAll('PLAY#'))

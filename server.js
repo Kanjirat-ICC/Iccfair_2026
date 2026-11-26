@@ -46,7 +46,10 @@ function themeFile(suffix) {
 const hasFile = (...parts) => fs.existsSync(path.join(__dirname, 'public', ...parts));
 /* ภาพของแต่ละรางวัล: รางวัลตั้งต้นใช้ไฟล์ใน public/prizes, รางวัลที่อัปโหลดจากหลังบ้านใช้ /img/<id> */
 function prizeImages(p) {
-  if (p.imgVer) { const u = `img/${encodeURIComponent(p.id)}?v=${p.imgVer}`; return { file: u, wheel: u, logo: '' }; }
+  if (p.imgVer) {
+    const u = slot => `img/${encodeURIComponent(p.id + slot)}?v=${p.imgVer}`;
+    return { wheel: u(''), logo: p.hasLogo ? u(':logo') : '', file: p.hasFull ? u(':full') : u('') };
+  }
   if (p.file) return {
     file: 'prizes/' + p.file,
     wheel: hasFile('prizes', 'wheel', p.file) ? 'prizes/wheel/' + p.file : 'prizes/' + p.file,
@@ -156,7 +159,7 @@ async function dashboard(msg = '', isErr = false) {
   const rows = prizes.map(p => `<tr class="${p.qty > 0 ? '' : 'zero'}">
 <td>${thumb(p)}</td>
 <td colspan="3"><form method="post" action="/admin/prize/save" class="row pform">
-  <input type="hidden" name="id" value="${esc(p.id)}"><input type="hidden" name="img" class="imgdata">
+  <input type="hidden" name="id" value="${esc(p.id)}"><input type="hidden" name="img" class="imgdata"><input type="hidden" name="logo" class="logodata"><input type="hidden" name="full" class="fulldata"><span class="split" hidden></span>
   <input type="text" name="name" value="${esc(p.name)}" maxlength="80" required class="nm">
   <span class="given">แจกแล้ว ${given[p.name] || 0}</span>
   <label class="lbl">คงเหลือ <input type="number" name="qty" min="0" max="100000" value="${p.qty}" required></label>
@@ -173,6 +176,7 @@ async function dashboard(msg = '', isErr = false) {
 .pform .nm{width:min(320px,100%)}.pform input[type=number]{width:90px}.given{color:#666;font-size:.9em;min-width:84px}
 .lbl{display:flex;gap:6px;align-items:center;font-size:.9em}.file{cursor:pointer;padding:6px 12px}.file.picked{background:#e8fff0;border-color:#2a9d55;color:#2a9d55}
 .add{background:#fff;border-radius:14px;padding:16px;box-shadow:0 4px 14px rgba(0,0,0,.07)}.add .preview{width:80px;height:80px;object-fit:contain;background:#f4f4fa;border-radius:10px}
+.split{display:inline-flex;gap:6px;align-items:center;background:#2a1f8f;border-radius:10px;padding:4px 8px}.split img{height:56px;max-width:110px;object-fit:contain}.split small{color:#fff;font-size:.75em}
 .msg.err{background:#fff0f0;border-color:#e99}input[type=text].nm,.add input[type=text]{width:260px;padding:6px 8px;border:2px solid #ddd;border-radius:8px;font-family:inherit}
 </style></head><body><div class="wrap">
 <div class="row" style="justify-content:space-between"><div><h1>Lucky Spin — หลังบ้าน</h1><div class="sub">${esc(CFG.pageTitle)} · ${esc(CFG.dateText)} · ที่เก็บข้อมูล: ${store.kind}</div></div>
@@ -187,30 +191,63 @@ ${msg ? `<div class="msg${isErr ? ' err' : ''}">${esc(msg)}</div>` : ''}
 
 <h2>เพิ่มรางวัลใหม่</h2>
 <form method="post" action="/admin/prize/add" class="row add pform">
-  <input type="hidden" name="img" class="imgdata">
-  <img class="preview" alt="" hidden>
+  <input type="hidden" name="img" class="imgdata"><input type="hidden" name="logo" class="logodata"><input type="hidden" name="full" class="fulldata">
+  <span class="split" hidden></span>
   <input type="text" name="name" placeholder="ชื่อสินค้า" maxlength="80" required>
   <label class="lbl">จำนวน <input type="number" name="qty" min="0" max="100000" value="10" required></label>
   <label class="btn ghost file">เลือกรูป<input type="file" accept="image/png,image/jpeg,image/webp" class="imgfile" hidden></label>
   <button>+ เพิ่มรางวัล</button>
 </form>
-<p class="sub">รูปแนะนำ: PNG พื้นหลังโปร่งใส ภาพสินค้าชิ้นเดียว · ระบบจะย่อรูปให้อัตโนมัติ</p>
+<p class="sub">ใช้รูปแบบ <b>โลโก้ด้านบน + สินค้าด้านล่าง</b> (พื้นขาวหรือโปร่งใส) ได้เลย ระบบจะลบพื้นขาว แยกโลโก้กับสินค้าให้อัตโนมัติ — โลโก้ไปอยู่ขอบนอกวงล้อ สินค้าขยายเต็มช่อง · ถ้าไม่มีโลโก้ ใช้รูปสินค้าอย่างเดียวก็ได้</p>
 
 <h2>ผู้เล่นล่าสุด (50 รายการ)</h2><table><tr><th>เวลา</th><th>รหัสสมาชิก</th><th>รางวัลที่ได้</th><th></th></tr>${recent || '<tr><td colspan="4">ยังไม่มีผู้เล่น</td></tr>'}</table>
 <h2>รีเซ็ตทั้งหมด</h2><form method="post" action="/admin/reset" class="row" onsubmit="return confirm('ลบผู้เล่นทั้งหมดและคืนจำนวนรางวัลเป็นค่าที่บันทึกล่าสุด?')">
 <span>พิมพ์คำว่า RESET เพื่อยืนยัน (ลบประวัติผู้เล่นทั้งหมด + คืนจำนวนรางวัลเป็นค่าที่บันทึกล่าสุดของแต่ละรายการ)</span><input type="text" name="confirm" placeholder="RESET"><button class="danger">รีเซ็ต</button></form>
 <p class="sub" style="margin-top:24px">แนะนำ: Export CSV เก็บไว้ก่อนรีเซ็ตทุกครั้ง</p></div>
 <script>
-/* ย่อรูปในเบราว์เซอร์ก่อนส่ง (ด้านยาวสุด 600px) */
-function shrink(file){ return new Promise((ok,bad)=>{ const r=new FileReader(); r.onerror=bad; r.onload=()=>{ const im=new Image(); im.onerror=bad; im.onload=()=>{
-  let s=Math.min(1,600/Math.max(im.width,im.height)); const c=document.createElement('canvas'); c.width=Math.round(im.width*s); c.height=Math.round(im.height*s);
-  c.getContext('2d').drawImage(im,0,0,c.width,c.height); let d=c.toDataURL('image/webp',.85); if(!d.startsWith('data:image/webp')) d=c.toDataURL('image/png'); ok(d); }; im.src=r.result; }; r.readAsDataURL(file); }); }
+/* ── เตรียมรูปในเบราว์เซอร์ก่อนส่ง ──
+   1) ลบพื้นขาวที่ต่อจากขอบภาพ  2) แยก "โลโก้" (แถบบนสุด) ออกจาก "สินค้า"  3) ครอปชิด + ย่อ */
+function loadImg(file){ return new Promise((ok,bad)=>{ const r=new FileReader(); r.onerror=bad; r.onload=()=>{ const im=new Image(); im.onerror=bad; im.onload=()=>ok(im); im.src=r.result; }; r.readAsDataURL(file); }); }
+function toData(c){ let d=c.toDataURL('image/webp',.86); if(!d.startsWith('data:image/webp')) d=c.toDataURL('image/png'); return d; }
+function cropCanvas(src,x,y,w,h,max){ const s=Math.min(1,max/Math.max(w,h)); const c=document.createElement('canvas'); c.width=Math.max(1,Math.round(w*s)); c.height=Math.max(1,Math.round(h*s));
+  c.getContext('2d').drawImage(src,x,y,w,h,0,0,c.width,c.height); return c; }
+async function prepare(file){
+  const im=await loadImg(file); const s=Math.min(1,1400/Math.max(im.width,im.height));
+  const W=Math.round(im.width*s), H=Math.round(im.height*s);
+  const c=document.createElement('canvas'); c.width=W; c.height=H; const ctx=c.getContext('2d'); ctx.drawImage(im,0,0,W,H);
+  const id=ctx.getImageData(0,0,W,H), d=id.data;
+  const isBg=i=>{ const r=d[i],g=d[i+1],b=d[i+2],a=d[i+3]; if(a<16) return true; const mn=Math.min(r,g,b),mx=Math.max(r,g,b); return mn>=242 && mx-mn<14; };
+  /* ลบพื้นขาว: flood fill จากขอบภาพ */
+  const seen=new Uint8Array(W*H), st=[];
+  for(let x=0;x<W;x++){ st.push(x, (H-1)*W+x); } for(let y=0;y<H;y++){ st.push(y*W, y*W+W-1); }
+  while(st.length){ const k=st.pop(); if(seen[k]) continue; if(!isBg(k*4)) continue; seen[k]=1; d[k*4+3]=0;
+    const x=k%W, y=(k/W)|0; if(x>0) st.push(k-1); if(x<W-1) st.push(k+1); if(y>0) st.push(k-W); if(y<H-1) st.push(k+W); }
+  /* หาแถบเนื้อหาแนวนอน */
+  const rowHas=new Uint8Array(H);
+  for(let y=0;y<H;y++){ let n=0; for(let x=0;x<W;x++){ if(d[(y*W+x)*4+3]>20 && ++n>2){ rowHas[y]=1; break; } } }
+  let runs=[]; for(let y=0;y<H;){ if(rowHas[y]){ const a=y; while(y<H&&rowHas[y]) y++; runs.push([a,y]); } else y++; }
+  const merged=[]; for(const r of runs){ if(merged.length && r[0]-merged[merged.length-1][1] < H*0.02) merged[merged.length-1][1]=r[1]; else merged.push(r); }
+  if(!merged.length) throw new Error('empty');
+  const bbox=(y0,y1)=>{ let x0=W,x1=-1,yy0=H,yy1=-1; for(let y=y0;y<y1;y++) for(let x=0;x<W;x++) if(d[(y*W+x)*4+3]>20){ if(x<x0)x0=x; if(x>x1)x1=x; if(y<yy0)yy0=y; if(y>yy1)yy1=y; } return [x0,yy0,x1-x0+1,yy1-yy0+1]; };
+  let logoBox=null, prodRange=[merged[0][0], merged[merged.length-1][1]];
+  const total=prodRange[1]-prodRange[0];
+  if(merged.length>=2 && (merged[0][1]-merged[0][0]) < total*0.4){ logoBox=bbox(merged[0][0],merged[0][1]); prodRange=[merged[1][0], merged[merged.length-1][1]]; }
+  /* โลโก้แบบกล่องทึบ (เช่น SHEENE, bsc): เติมช่องที่ถูกลบในกรอบกลับเป็นขาว ไม่ให้ตัวอักษรขาวในโลโก้หาย */
+  if(logoBox){ const [x0,y0,w,h]=logoBox; let op=0; for(let y=y0;y<y0+h;y++) for(let x=x0;x<x0+w;x++) if(d[(y*W+x)*4+3]>20) op++;
+    if(op/(w*h)>0.8) for(let y=y0;y<y0+h;y++) for(let x=x0;x<x0+w;x++){ const i=(y*W+x)*4; if(d[i+3]<255){ d[i]=d[i+1]=d[i+2]=255; d[i+3]=255; } } }
+  ctx.putImageData(id,0,0);
+  const pb=bbox(prodRange[0],prodRange[1]), fb=bbox(merged[0][0],merged[merged.length-1][1]);
+  return { img: toData(cropCanvas(c,...pb,600)), logo: logoBox ? toData(cropCanvas(c,...logoBox,400)) : '', full: toData(cropCanvas(c,...fb,600)) };
+}
 document.querySelectorAll('.pform').forEach(f=>{
-  const inp=f.querySelector('.imgfile'), hid=f.querySelector('.imgdata'), lab=inp.closest('label'), pv=f.querySelector('.preview');
-  inp.addEventListener('change', async ()=>{ if(!inp.files[0]) return; lab.firstChild.textContent='กำลังย่อรูป…';
-    try{ hid.value=await shrink(inp.files[0]); lab.firstChild.textContent='✓ '+inp.files[0].name.slice(0,18); lab.classList.add('picked'); if(pv){pv.src=hid.value;pv.hidden=false;} }
-    catch(e){ lab.firstChild.textContent='รูปใช้ไม่ได้'; hid.value=''; } });
-  f.addEventListener('submit', e=>{ if(f.action.endsWith('/add') && !hid.value){ e.preventDefault(); alert('กรุณาเลือกรูปสินค้า'); } });
+  const inp=f.querySelector('.imgfile'), lab=inp.closest('label'), sp=f.querySelector('.split');
+  const set=(cls,v)=>{ f.querySelector('.'+cls).value=v||''; };
+  inp.addEventListener('change', async ()=>{ if(!inp.files[0]) return; lab.firstChild.textContent='กำลังเตรียมรูป…';
+    try{ const r=await prepare(inp.files[0]); set('imgdata',r.img); set('logodata',r.logo); set('fulldata',r.full);
+      lab.firstChild.textContent='✓ เลือกแล้ว'; lab.classList.add('picked');
+      sp.innerHTML=(r.logo?'<img src="'+r.logo+'" title="โลโก้"><small>+</small>':'')+'<img src="'+r.img+'" title="สินค้า"><small>'+(r.logo?'แยกโลโก้แล้ว':'ไม่พบโลโก้')+'</small>'; sp.hidden=false; }
+    catch(e){ lab.firstChild.textContent='รูปใช้ไม่ได้'; set('imgdata',''); set('logodata',''); set('fulldata',''); sp.hidden=true; } });
+  f.addEventListener('submit', e=>{ if(f.action.endsWith('/add') && !f.querySelector('.imgdata').value){ e.preventDefault(); alert('กรุณาเลือกรูปสินค้า'); } });
 });
 </script></body></html>`;
 }
@@ -219,17 +256,17 @@ async function validatePrizeForm(f) {
   const id = String(f.get('id') || '');
   const name = String(f.get('name') || '').trim().replace(/\s+/g, ' ');
   const qty = parseInt(f.get('qty'), 10);
-  const img = String(f.get('img') || '');
+  const img = String(f.get('img') || ''), logo = String(f.get('logo') || ''), full = String(f.get('full') || '');
   if (!name || name.length > 80) return { error: 'ชื่อสินค้าต้องมี 1–80 ตัวอักษร' };
   if (!Number.isInteger(qty) || qty < 0 || qty > 100000) return { error: 'จำนวนต้องเป็นตัวเลข 0–100000' };
-  if (img) {
-    const m = img.match(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/);
-    if (!m) return { error: 'ไฟล์รูปไม่ถูกต้อง (ใช้ PNG, JPG หรือ WEBP)' };
-    if (img.length > 380000) return { error: 'รูปใหญ่เกินไป ลองใช้รูปที่เล็กลง' };
+  for (const d of [img, logo, full]) {
+    if (!d) continue;
+    if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(d)) return { error: 'ไฟล์รูปไม่ถูกต้อง (ใช้ PNG, JPG หรือ WEBP)' };
+    if (d.length > 380000) return { error: 'รูปใหญ่เกินไป ลองใช้รูปที่เล็กลง' };
   }
   const dup = (await store.getPrizes()).find(x => x.id !== id && x.name.toLowerCase() === name.toLowerCase());
   if (dup) return { error: `มีรางวัลชื่อ "${name}" อยู่แล้ว` };
-  return { id, name, qty, img };
+  return { id, name, qty, img, logo: img ? logo : '', full: img ? full : '' };
 }
 
 /* ════════════════ ROUTER ════════════════ */
@@ -290,7 +327,7 @@ async function handle(req, res) {
       return send(res, 200, csv, 'text/csv; charset=utf-8', { 'Content-Disposition': `attachment; filename="${fname}"` });
     }
     if (req.method === 'POST') {
-      const f = new URLSearchParams(await readBody(req, 1.5e6));
+      const f = new URLSearchParams(await readBody(req, 3e6));
       let msg = '', isErr = false;
       if (p === '/admin/prize/save' || p === '/admin/prize/add') {
         const r = await validatePrizeForm(f);
